@@ -516,7 +516,9 @@ export default function HojaRutaScreen() {
               const tractor = String(rutaObj.tractor || '-').trim();
               const estado = String(rutaObj.estado || '-').trim();
               const chofer = String(rutaObj.cod_chof || '-').trim();
-              const detalles = Array.isArray(rutaObj.detalles) ? rutaObj.detalles as Record<string, unknown>[] : [];
+              const detalles = (Array.isArray(rutaObj.detalles) ? rutaObj.detalles as Record<string, unknown>[] : [])
+                .slice()
+                .sort((a, b) => parseInt(String(a.item || '0'), 10) - parseInt(String(b.item || '0'), 10));
               const todosConfirmados = detalles.length > 0 && detalles.every(d => Boolean(d.confirmado));
 
               return (
@@ -593,6 +595,7 @@ export default function HojaRutaScreen() {
                                 }}
                               >
                                 <View style={styles.detalleHeaderLeft}>
+                                  <Text style={styles.detalleRemitoCodigo}>{letra}-{sucur}-{numero}</Text>
                                   <Text style={styles.detalleCliente}>{cliente}</Text>
                                   {!isDetalleExpanded && (
                                     <Text style={styles.detalleVerDetalle}>Ver detalles</Text>
@@ -609,21 +612,13 @@ export default function HojaRutaScreen() {
                                 <>
                                   <View style={styles.detalleDireccionRow}>
                                     <Text style={[styles.detalleDireccion, styles.detalleDireccionFlex]}>{direccion}</Text>
-                                    {codPostal ? <Text style={styles.detalleCodPostalInline}>CP {codPostal}</Text> : null}
                                   </View>
+                                    {codPostal ?
+                                    <View style={styles.detalleDireccionRow}> 
+                                        <Text style={styles.detalleCodPostalInline}>CP {codPostal}</Text>
+                                    </View> : null
+                                    }
                                   {empresa ? <Text style={styles.detalleMetaHalf}>Empresa {empresa}</Text> : null}
-                                  {(tdoc || letra) ? (
-                                    <View style={styles.detalleMetaRow}>
-                                      {tdoc ? <Text style={styles.detalleMetaHalf}>Tipo Documento {tdoc}</Text> : <View style={styles.detalleMetaSpacer} />}
-                                      {letra ? <Text style={styles.detalleMetaHalf}>Letra {letra}</Text> : <View style={styles.detalleMetaSpacer} />}
-                                    </View>
-                                  ) : null}
-                                  {(sucur || numero) ? (
-                                    <View style={styles.detalleMetaRow}>
-                                      {sucur ? <Text style={styles.detalleMetaHalf}>Sucursal {sucur}</Text> : <View style={styles.detalleMetaSpacer} />}
-                                      {numero ? <Text style={styles.detalleMetaHalf}>Número {numero}</Text> : <View style={styles.detalleMetaSpacer} />}
-                                    </View>
-                                  ) : null}
                                 </>
                               )}
 
@@ -879,9 +874,17 @@ const styles = StyleSheet.create({
     borderBottomColor: '#1A2540',
     marginBottom: 4,
   },
+  detalleRemitoCodigo: {
+    color: '#FFFFFF',
+    fontSize: 18,
+    fontWeight: '900',
+    marginBottom: 3,
+    marginTop: 3,
+    letterSpacing: 0.5,
+  },
   detalleCliente: {
     color: '#D6DFF2',
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '600',
     marginBottom: 2,
   },
