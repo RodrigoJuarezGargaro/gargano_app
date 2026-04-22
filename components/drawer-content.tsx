@@ -5,7 +5,7 @@ import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import { DrawerContentScrollView } from '@react-navigation/drawer';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 
 export default function DrawerContent({ navigation }: DrawerContentComponentProps) {
   const router = useRouter();
@@ -35,9 +35,11 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
     >
       {/* Header */}
       <View style={styles.header}>
-        <View style={styles.logoBox}>
-          <Text style={styles.logoLetter}>G</Text>
-        </View>
+        <Image
+          source={require('@/assets/images/favicon.png')}
+          style={styles.logoImage}
+          resizeMode="contain"
+        />
         <Text style={styles.companyName}>Gargano Logística</Text>
         <View style={styles.divider} />
         <Text style={styles.userName}>{userName}</Text>
@@ -86,19 +88,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#1E2D45',
   },
-  logoBox: {
+  logoImage: {
     width: 48,
     height: 48,
     borderRadius: 12,
-    backgroundColor: '#673E8A',
-    alignItems: 'center',
-    justifyContent: 'center',
     marginBottom: 12,
-  },
-  logoLetter: {
-    color: '#FFFFFF',
-    fontSize: 26,
-    fontWeight: '800',
   },
   companyName: {
     color: '#E8ECF7',

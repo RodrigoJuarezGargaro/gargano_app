@@ -135,13 +135,13 @@ export default function HomeScreen() {
               <View style={styles.divider} />
             </View>
 
-            <Text style={styles.label}>Correo electronico</Text>
+            <Text style={styles.label}>Nombre de usuario</Text>
             <TextInput
               autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
+              autoComplete="username"
+              keyboardType="default"
               onChangeText={setEmail}
-              placeholder="Correo electrónico"
+              placeholder="Nombre de usuario"
               placeholderTextColor="#91A0BF"
               style={styles.input}
               value={email}
