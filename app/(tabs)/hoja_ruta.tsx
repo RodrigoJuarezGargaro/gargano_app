@@ -100,6 +100,32 @@ export default function TabTwoScreen() {
     router.replace('/');
   };
 
+  const updateDetalleOptimistically = (
+    empresa: string,
+    tdoc: string,
+    letra: string,
+    sucursal: string,
+    numero: string,
+    confirmado: boolean,
+  ) => {
+    setHojaRuta(prev =>
+      prev.map(ruta => {
+        const rutaObj = typeof ruta === 'object' && ruta !== null ? (ruta as Record<string, unknown>) : {};
+        const detalles = Array.isArray(rutaObj.detalles) ? (rutaObj.detalles as Record<string, unknown>[]) : [];
+        const updatedDetalles = detalles.map(det =>
+          String(det.empresa || '').trim() === empresa &&
+          String(det.tdoc || '').trim() === tdoc &&
+          String(det.letra || '').trim() === letra &&
+          String(det.sucur || '').trim() === sucursal &&
+          String(det.numero || '').trim() === numero
+            ? { ...det, confirmado }
+            : det
+        );
+        return { ...rutaObj, detalles: updatedDetalles };
+      })
+    );
+  };
+
   const handleConfirmDelivery = (
     hruta_d: string,
     cliente: string,
@@ -225,6 +251,7 @@ export default function TabTwoScreen() {
               }
 
               if (guardarFechaData?.actualizado) {
+                updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, true);
                 Toast.show({ type: 'success', text1: 'Entrega confirmada y fecha guardada correctamente.' });
                 await fetchHojaRuta(userName);
               } else {
@@ -295,6 +322,7 @@ export default function TabTwoScreen() {
               }
 
               if (anularData?.anulado) {
+                updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, false);
                 Toast.show({ type: 'success', text1: 'Confirmacion anulada correctamente.' });
                 await fetchHojaRuta(userName);
               } else {
@@ -302,6 +330,144 @@ export default function TabTwoScreen() {
               }
             } catch (error) {
               console.error('Error anulando entrega:', error);
+              Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRejectDelivery = (
+    hruta_d: string,
+    cliente: string,
+    empresa: string,
+    tdoc: string,
+    letra: string,
+    sucursal: string,
+    numero: string,
+    fecha: string,
+  ) => {
+    Alert.alert(
+      'Rechazar remito',
+      `¿Rechazar el remito de ${cliente}?\nHoja de ruta: ${hruta_d}`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Rechazar',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log({
+                empresa,
+                tdoc,
+                letra,
+                sucursal,
+                numero,
+                usuario: userName,
+                hruta_d: parseInt(hruta_d, 10),
+                fecha,
+              })
+              const rechazarResponse = await fetch(
+                'https://gargano-proxy.vercel.app/api/proxy?endpoint=rechazar_remito_app',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                  body: JSON.stringify({
+                    empresa,
+                    tdoc,
+                    letra,
+                    sucursal,
+                    numero,
+                    usuario: userName,
+                    hruta_d: parseInt(hruta_d, 10),
+                    fecha,
+                  }),
+                }
+              );
+              const rechazarData = await rechazarResponse.json();
+              console.log('Rechazar remito response:', rechazarData);
+              if (!rechazarResponse.ok) {
+                Toast.show({ type: 'error', text1: rechazarData?.error ? JSON.stringify(rechazarData.error) : 'No se pudo rechazar el remito.' });
+                return;
+              }
+              if (rechazarData?.rechazado) {
+                updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, true);
+                Toast.show({ type: 'success', text1: 'Remito rechazado correctamente.' });
+                await fetchHojaRuta(userName);
+              } else {
+                Toast.show({ type: 'error', text1: 'No se pudo rechazar el remito.' });
+              }
+            } catch (error) {
+              console.error('Error rechazando remito:', error);
+              Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handlePartialDelivery = (
+    hruta_d: string,
+    cliente: string,
+    empresa: string,
+    tdoc: string,
+    letra: string,
+    sucursal: string,
+    numero: string,
+    fecha: string,
+  ) => {
+    Alert.alert(
+      'Entrega parcial',
+      `¿Registrar entrega parcial a ${cliente}?\nHoja de ruta: ${hruta_d}`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Confirmar',
+          onPress: async () => {
+            try {
+              console.log({
+                empresa,
+                tdoc,
+                letra,
+                sucursal,
+                numero,
+                usuario: userName,
+                hruta_d: parseInt(hruta_d, 10),
+                fecha,
+              })
+              const parcialResponse = await fetch(
+                'https://gargano-proxy.vercel.app/api/proxy?endpoint=entrega_parcial_remito_app',
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                  body: JSON.stringify({
+                    empresa,
+                    tdoc,
+                    letra,
+                    sucursal,
+                    numero,
+                    usuario: userName,
+                    hruta_d: parseInt(hruta_d, 10),
+                    fecha,
+                  }),
+                }
+              );
+              const parcialData = await parcialResponse.json();
+              if (!parcialResponse.ok) {
+                Toast.show({ type: 'error', text1: parcialData?.error ? JSON.stringify(parcialData.error) : 'No se pudo registrar la entrega parcial.' });
+                return;
+              }
+              if (parcialData?.entrega_parcial) {
+                updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, true);
+                Toast.show({ type: 'success', text1: 'Entrega parcial registrada correctamente.' });
+                await fetchHojaRuta(userName);
+              } else {
+                Toast.show({ type: 'error', text1: 'No se pudo registrar la entrega parcial.' });
+              }
+            } catch (error) {
+              console.error('Error registrando entrega parcial:', error);
               Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
             }
           },
@@ -471,12 +637,26 @@ export default function TabTwoScreen() {
                                   <Text style={styles.undoConfirmButtonText}>Anular confirmacion</Text>
                                 </Pressable>
                               ) : (
-                                <Pressable
-                                  onPress={() => handleConfirmDelivery(hruta_d, cliente, empresa, tdoc, letra, sucur, numero, fecha)}
-                                  style={styles.confirmButton}>
-                                  <Ionicons name="checkmark-circle-outline" size={13} color="#F2F5FB" />
-                                  <Text style={styles.confirmButtonText}>Confirmar</Text>
-                                </Pressable>
+                                <View style={styles.actionButtonsRow}>
+                                  <Pressable
+                                    onPress={() => handleConfirmDelivery(hruta_d, cliente, empresa, tdoc, letra, sucur, numero, fecha)}
+                                    style={styles.confirmButton}>
+                                    <Ionicons name="checkmark-circle-outline" size={13} color="#F2F5FB" />
+                                    <Text style={styles.confirmButtonText}>Confirmar</Text>
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={() => handleRejectDelivery(hruta_d, cliente, empresa, tdoc, letra, sucur, numero, fecha)}
+                                    style={styles.rejectButton}>
+                                    <Ionicons name="close-circle-outline" size={13} color="#F9E8E8" />
+                                    <Text style={styles.rejectButtonText}>Rechazar</Text>
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={() => handlePartialDelivery(hruta_d, cliente, empresa, tdoc, letra, sucur, numero, fecha)}
+                                    style={styles.partialButton}>
+                                    <Ionicons name="git-branch-outline" size={13} color="#F2E8FF" />
+                                    <Text style={styles.partialButtonText}>Parcial</Text>
+                                  </Pressable>
+                                </View>
                               )}
                             </View>
                           </View>
@@ -848,18 +1028,54 @@ const styles = StyleSheet.create({
     marginTop: 2,
     fontWeight: '700',
   },
+  actionButtonsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
   confirmButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    alignSelf: 'flex-start',
     paddingHorizontal: 10,
     height: 30,
     borderRadius: 6,
     backgroundColor: '#1E4A2E',
     borderWidth: 1,
     borderColor: '#2E6B42',
-    marginTop: 8,
+  },
+  rejectButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    height: 30,
+    borderRadius: 6,
+    backgroundColor: '#5A2323',
+    borderWidth: 1,
+    borderColor: '#8A3A3A',
+  },
+  rejectButtonText: {
+    color: '#F1C0C0',
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  partialButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    height: 30,
+    borderRadius: 6,
+    backgroundColor: '#1E2A4A',
+    borderWidth: 1,
+    borderColor: '#3A5080',
+  },
+  partialButtonText: {
+    color: '#C0D0F5',
+    fontSize: 11,
+    fontWeight: '700',
   },
   confirmButtonText: {
     color: '#A0E0B0',
