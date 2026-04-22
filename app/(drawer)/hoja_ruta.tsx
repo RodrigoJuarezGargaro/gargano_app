@@ -1,6 +1,7 @@
 import { clearUserSession } from '@/services/session-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -10,8 +11,9 @@ import Toast from 'react-native-toast-message';
 
 const API_RESPONSE_TIMEOUT_MS = 120000;
 
-export default function TabTwoScreen() {
+export default function HojaRutaScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const [userName, setUserName] = useState('Usuario');
   const [userMail, setUserMail] = useState('Sin mail registrado');
   const [hojaRuta, setHojaRuta] = useState<unknown[]>([]);
@@ -481,12 +483,14 @@ export default function TabTwoScreen() {
       <StatusBar style="light" />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.headerRow}>
-          <View style={styles.logoBox}>
-            <Text style={styles.logoLetter}>G</Text>
-          </View>
+          <Pressable
+            onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+            style={styles.menuButton}
+          >
+            <Ionicons name="menu-outline" size={22} color="#DCE2F1" />
+          </Pressable>
           <View style={styles.headerTextWrap}>
-            <Text style={styles.headerTitle}>Gargano Logistica</Text>
-            <Text style={styles.headerSubtitle}>Panel operativo</Text>
+            <Text style={styles.headerTitle}>Hoja de ruta</Text>
           </View>
           <Pressable onPress={handleLogout} style={styles.logoutButton}>
             <Ionicons name="log-out-outline" size={18} color="#DCE2F1" />
@@ -561,7 +565,6 @@ export default function TabTwoScreen() {
                       style={styles.routeCardChevron}
                     />
                   </Pressable>
-
 
                   {detalles.length > 0 && expandedCards.has(index) && (
                     <View style={styles.detallesBlock}>
@@ -691,6 +694,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
   },
+  menuButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#44506A',
+    backgroundColor: '#232E44',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
   logoBox: {
     width: 40,
     height: 40,
@@ -741,29 +755,6 @@ const styles = StyleSheet.create({
     color: '#A3ADBF',
     fontSize: 14,
   },
-  kpiGrid: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 12,
-  },
-  kpiCard: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#44506A',
-    backgroundColor: '#232E44',
-    borderRadius: 12,
-    padding: 14,
-  },
-  kpiLabel: {
-    color: '#B7C2D8',
-    fontSize: 13,
-    marginBottom: 6,
-  },
-  kpiValue: {
-    color: '#F2F5FB',
-    fontSize: 26,
-    fontWeight: '700',
-  },
   sectionBlock: {
     marginTop: 12,
     borderWidth: 1,
@@ -777,34 +768,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     marginBottom: 12,
-  },
-  eventItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  eventBadge: {
-    width: 8,
-    height: 8,
-    borderRadius: 99,
-    marginRight: 10,
-    backgroundColor: '#69D56F',
-  },
-  eventBadgePurple: {
-    backgroundColor: '#926FA9',
-  },
-  eventTextWrap: {
-    flex: 1,
-  },
-  eventTitle: {
-    color: '#ECF1FF',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  eventTime: {
-    color: '#98A4BE',
-    fontSize: 12,
-    marginTop: 2,
   },
   emptyState: {
     paddingVertical: 24,
@@ -844,7 +807,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 6,
   },
-  routeCardHeaderRight: {},
   routeCardChevron: {
     marginLeft: 8,
   },
@@ -868,16 +830,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  routeCardBadge: {
-    color: '#926FA9',
-    fontSize: 11,
-    fontWeight: '700',
-    borderWidth: 1,
-    borderColor: '#5A3F6A',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
   routeCardInfoRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -891,7 +843,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 5,
   },
-  routeCardInfoIcon: {},
   routeCardInfoText: {
     color: '#8A96AC',
     fontSize: 12,
@@ -985,36 +936,6 @@ const styles = StyleSheet.create({
   },
   detalleMetaSpacer: {
     flex: 1,
-  },
-  detalleCodPostal: {
-    color: '#5E6E85',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  detalleEmpresa: {
-    color: '#5E6E85',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  detalleTdoc: {
-    color: '#5E6E85',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  detalleLetra: {
-    color: '#5E6E85',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  detalleSucur: {
-    color: '#5E6E85',
-    fontSize: 11,
-    marginTop: 2,
-  },
-  detalleNumero: {
-    color: '#5E6E85',
-    fontSize: 11,
-    marginTop: 2,
   },
   detalleConfirmadoSi: {
     color: '#6FD78C',
