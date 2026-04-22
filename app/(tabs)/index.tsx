@@ -39,6 +39,12 @@ export default function HomeScreen() {
         return;
       }
 
+      const onboardingDone = await AsyncStorage.getItem('onboarding_completed');
+      if (!onboardingDone) {
+        router.replace('/onboarding');
+        return;
+      }
+
       setIsCheckingSession(false);
     };
 

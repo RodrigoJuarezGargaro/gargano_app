@@ -17,9 +17,8 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
       const session = await AsyncStorage.getItem('userSession');
       if (!session) return;
       const data = JSON.parse(session);
-      if (data.nombre) setUserName(data.nombre);
+      if (data.nombre_usuario) setUserName(data.nombre_usuario);
       else if (data.login) setUserName(data.login);
-      if (data.mail) setUserMail(data.mail);
     };
     load();
   }, []);

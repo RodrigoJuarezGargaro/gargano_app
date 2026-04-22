@@ -15,7 +15,6 @@ export default function HojaRutaScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const [userName, setUserName] = useState('Usuario');
-  const [userMail, setUserMail] = useState('Sin mail registrado');
   const [hojaRuta, setHojaRuta] = useState<unknown[]>([]);
   const [isLoadingRoutes, setIsLoadingRoutes] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
@@ -24,6 +23,7 @@ export default function HojaRutaScreen() {
   useEffect(() => {
     const loadSession = async () => {
       const session = await AsyncStorage.getItem('userSession');
+      console.log('Cargando sesión de usuario...', { session });
       if (!session) {
         router.replace('/');
         return;
@@ -32,16 +32,12 @@ export default function HojaRutaScreen() {
       const sessionData = JSON.parse(session);
 
       let displayName = 'Usuario';
-      if (sessionData.nombre) {
-        setUserName(sessionData.nombre);
+      if (sessionData.nombre_usuario) {
+        setUserName(sessionData.nombre_usuario);
         displayName = sessionData.nombre;
       } else if (sessionData.login) {
         setUserName(sessionData.login);
         displayName = sessionData.login;
-      }
-
-      if (sessionData.mail) {
-        setUserMail(sessionData.mail);
       }
 
       await fetchHojaRuta(displayName);
@@ -499,7 +495,6 @@ export default function HojaRutaScreen() {
 
         <View style={styles.greetingBlock}>
           <Text style={styles.greetingTitle}>Hola, {userName}</Text>
-          <Text style={styles.greetingSubtitle}>{userMail}</Text>
         </View>
 
         <View style={styles.sectionBlock}>
