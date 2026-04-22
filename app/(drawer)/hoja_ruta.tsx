@@ -570,6 +570,8 @@ export default function HojaRutaScreen() {
                         const direccion = String(det.direccion || '').trim();
                         const codPostal = String(det.cod_postal || '').trim();
                         const empresa = String(det.empresa || '').trim();
+                        const empresaNombre = String(det.empresa_nombre || '').trim();
+                        const localidadNombre = String(det.localidad_nombre || '').trim();
                         const tdoc = String(det.tdoc || '').trim();
                         const letra = String(det.letra || '').trim();
                         const sucur = String(det.sucur || '').trim();
@@ -618,7 +620,8 @@ export default function HojaRutaScreen() {
                                         <Text style={styles.detalleCodPostalInline}>CP {codPostal}</Text>
                                     </View> : null
                                     }
-                                  {empresa ? <Text style={styles.detalleMetaHalf}>Empresa {empresa}</Text> : null}
+                                  {empresaNombre ? <Text style={styles.detalleMetaHalf}>{empresaNombre}</Text> : null}
+                                  {localidadNombre ? <Text style={styles.detalleMetaHalf}>{localidadNombre}</Text> : null}
                                 </>
                               )}
 
