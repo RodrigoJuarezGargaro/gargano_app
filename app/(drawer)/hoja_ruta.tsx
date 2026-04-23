@@ -2,6 +2,7 @@ import { clearUserSession } from '@/services/session-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -406,6 +407,20 @@ export default function HojaRutaScreen() {
     );
   };
 
+  const handleTakePhoto = async (cliente: string, letra: string, sucur: string, numero: string) => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Toast.show({ type: 'error', text1: 'Se necesita permiso para acceder a la cámara.' });
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 0.7,
+    });
+    if (!result.canceled) {
+      Toast.show({ type: 'success', text1: `Foto tomada para ${letra}-${sucur}-${numero}` });
+    }
+  };
+
   const handlePartialDelivery = (
     hruta_d: string,
     cliente: string,
@@ -651,6 +666,11 @@ export default function HojaRutaScreen() {
                                     style={styles.partialButton}>
                                     <Ionicons name="git-branch-outline" size={13} color="#F2E8FF" />
                                     <Text style={styles.partialButtonText}>Parcial</Text>
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={() => handleTakePhoto(cliente, letra, sucur, numero)}
+                                    style={styles.cameraButton}>
+                                    <Ionicons name="camera-outline" size={15} color="#C8D0F0" />
                                   </Pressable>
                                 </View>
                               )}
@@ -1003,6 +1023,16 @@ const styles = StyleSheet.create({
     color: '#A0E0B0',
     fontSize: 11,
     fontWeight: '700',
+  },
+  cameraButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 30,
+    height: 30,
+    borderRadius: 6,
+    backgroundColor: '#1A2040',
+    borderWidth: 1,
+    borderColor: '#3A4A70',
   },
   undoConfirmButton: {
     flexDirection: 'row',
