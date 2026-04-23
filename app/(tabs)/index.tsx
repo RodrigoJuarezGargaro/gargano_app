@@ -74,7 +74,6 @@ export default function HomeScreen() {
         return;
       }
 
-      console.log('Login exitoso:', responseData);
       await AsyncStorage.setItem('userSession', JSON.stringify(responseData.user));
       router.replace('/hoja_ruta');
     } catch (error) {

@@ -25,7 +25,6 @@ export default function HojaRutaScreen() {
   useEffect(() => {
     const loadSession = async () => {
       const session = await AsyncStorage.getItem('userSession');
-      console.log('Cargando sesión de usuario...', { session });
       if (!session) {
         router.replace('/');
         return;
@@ -391,17 +390,53 @@ export default function HojaRutaScreen() {
     );
   };
 
-  const handleTakePhoto = async (cliente: string, letra: string, sucur: string, numero: string) => {
+  const handleTakePhoto = async (empresa: string, tdoc: string, letra: string, sucur: string, numero: string) => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Toast.show({ type: 'error', text1: 'Se necesita permiso para acceder a la cámara.' });
       return;
     }
+    console.log('Permiso de cámara concedido, abriendo cámara...');
     const result = await ImagePicker.launchCameraAsync({
       quality: 0.7,
+      mediaTypes: ['images'],
     });
-    if (!result.canceled) {
-      Toast.show({ type: 'success', text1: `Foto tomada para ${letra}-${sucur}-${numero}` });
+    if (result.canceled) return;
+
+    const asset = result.assets[0];
+    const formData = new FormData();
+    formData.append('empresa', empresa);
+    formData.append('tdoc', tdoc);
+    formData.append('letra', letra);
+    formData.append('sucur', sucur);
+    formData.append('numero', numero);
+    formData.append('imagen', {
+      uri: asset.uri,
+      type: asset.mimeType ?? 'image/jpeg',
+      name: `foto_${letra}-${sucur}-${numero}.jpg`,
+    } as unknown as Blob);
+
+    const rodriimagen = formData.get('imagen') as unknown as { uri: string; type: string; name: string };
+    console.log('Enviando imagen al servidor...', { empresa, tdoc, letra, sucur, numero, imagen: rodriimagen });
+
+    try {
+      const response = await fetch(
+        'https://gargano-proxy.vercel.app/api/proxy?endpoint=envio_imagen_remito_app',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('Error enviando imagen:', data);
+        Toast.show({ type: 'error', text1: data?.error ? JSON.stringify(data.error) : 'No se pudo enviar la imagen.' });
+        return;
+      }
+      Toast.show({ type: 'success', text1: 'Imagen enviada correctamente.' });
+    } catch (error) {
+      console.error('Error enviando imagen:', error);
+      Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
     }
   };
 
@@ -642,7 +677,7 @@ export default function HojaRutaScreen() {
                                     <Text style={styles.partialButtonText}>Parcial</Text>
                                   </Pressable>
                                   <Pressable
-                                    onPress={() => handleTakePhoto(cliente, letra, sucur, numero)}
+                                    onPress={() => handleTakePhoto(empresa, tdoc, letra, sucur, numero)}
                                     style={styles.cameraButton}>
                                     <Ionicons name="camera-outline" size={15} color="#C8D0F0" />
                                   </Pressable>
