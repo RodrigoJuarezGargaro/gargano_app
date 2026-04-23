@@ -16,6 +16,7 @@ export default function HojaRutaScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const [userName, setUserName] = useState('Usuario');
+  const [name, setName] = useState('Usuario');
   const [hojaRuta, setHojaRuta] = useState<unknown[]>([]);
   const [isLoadingRoutes, setIsLoadingRoutes] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
@@ -33,12 +34,17 @@ export default function HojaRutaScreen() {
       const sessionData = JSON.parse(session);
 
       let displayName = 'Usuario';
-      if (sessionData.nombre_usuario) {
-        setUserName(sessionData.nombre_usuario);
+      if (sessionData.nombre) {
+        setUserName(sessionData.nombre);
+        setName(sessionData.nombre_usuario);
         displayName = sessionData.nombre;
       } else if (sessionData.login) {
-        setUserName(sessionData.login);
-        displayName = sessionData.login;
+        //Ver bien que hacer aca. Porque si no tenemos el dato del nombre, no acepta valores alternativos o de fallback. 
+        // Entonces si el backend no nos devuelve el nombre del usuario, quedamos con un "Usuario" generico en toda la app, lo cual no es ideal. 
+        // Por eso se me ocurrio usar el login como fallback, pero no se si es lo mejor.
+        setUserName(String(sessionData.nombre || sessionData.login).trim());
+        setName(sessionData.login);
+        displayName = String(sessionData.nombre || sessionData.login).trim();
       }
 
       await fetchHojaRuta(displayName);
@@ -69,8 +75,6 @@ export default function HojaRutaScreen() {
       } finally {
         clearTimeout(timeoutId);
       }
-
-      console.log('Hoja de ruta response status:', response.status);
 
       if (!response.ok) {
         Toast.show({ type: 'error', text1: 'Error al obtener hoja de ruta. Intenta nuevamente más tarde.' });
@@ -289,15 +293,6 @@ export default function HojaRutaScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log({
-                empresa,
-                tdoc,
-                letra,
-                sucursal,
-                numero,
-                usuario: userName,
-              });
-
               const anularResponse = await fetch(
                 'https://gargano-proxy.vercel.app/api/proxy?endpoint=anular_remito_app',
                 {
@@ -357,16 +352,6 @@ export default function HojaRutaScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              console.log({
-                empresa,
-                tdoc,
-                letra,
-                sucursal,
-                numero,
-                usuario: userName,
-                hruta_d: parseInt(hruta_d, 10),
-                fecha,
-              })
               const rechazarResponse = await fetch(
                 'https://gargano-proxy.vercel.app/api/proxy?endpoint=rechazar_remito_app',
                 {
@@ -385,7 +370,6 @@ export default function HojaRutaScreen() {
                 }
               );
               const rechazarData = await rechazarResponse.json();
-              console.log('Rechazar remito response:', rechazarData);
               if (!rechazarResponse.ok) {
                 Toast.show({ type: 'error', text1: rechazarData?.error ? JSON.stringify(rechazarData.error) : 'No se pudo rechazar el remito.' });
                 return;
@@ -440,16 +424,6 @@ export default function HojaRutaScreen() {
           text: 'Confirmar',
           onPress: async () => {
             try {
-              console.log({
-                empresa,
-                tdoc,
-                letra,
-                sucursal,
-                numero,
-                usuario: userName,
-                hruta_d: parseInt(hruta_d, 10),
-                fecha,
-              })
               const parcialResponse = await fetch(
                 'https://gargano-proxy.vercel.app/api/proxy?endpoint=entrega_parcial_remito_app',
                 {
@@ -509,7 +483,7 @@ export default function HojaRutaScreen() {
         </View>
 
         <View style={styles.greetingBlock}>
-          <Text style={styles.greetingTitle}>Hola, {userName}</Text>
+          <Text style={styles.greetingTitle}>Hola, {name}</Text>
         </View>
 
         <View style={styles.sectionBlock}>
