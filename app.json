@@ -68,13 +68,5 @@
       }
     },
     "owner": "rjuarezs-organization",
-    "build": {
-      "preview": {
-        "distribution": "internal",
-        "ios": {
-          "simulator": false
-        }
-      }
-    }
   }
 }

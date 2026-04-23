@@ -635,8 +635,8 @@ export default function HojaRutaScreen() {
                                         <Text style={styles.detalleCodPostalInline}>CP {codPostal}</Text>
                                     </View> : null
                                     }
-                                  {empresaNombre ? <Text style={styles.detalleMetaHalf}>{empresaNombre}</Text> : null}
                                   {localidadNombre ? <Text style={styles.detalleMetaHalf}>{localidadNombre}</Text> : null}
+                                  {empresaNombre ? <Text style={styles.detalleMetaHalf}>{empresaNombre}</Text> : null}
                                 </>
                               )}
 
