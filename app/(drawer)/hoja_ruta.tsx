@@ -396,7 +396,6 @@ export default function HojaRutaScreen() {
       Toast.show({ type: 'error', text1: 'Se necesita permiso para acceder a la cámara.' });
       return;
     }
-    console.log('Permiso de cámara concedido, abriendo cámara...');
     const result = await ImagePicker.launchCameraAsync({
       quality: 0.7,
       mediaTypes: ['images'],
@@ -417,7 +416,8 @@ export default function HojaRutaScreen() {
     } as unknown as Blob);
 
     const rodriimagen = formData.get('imagen') as unknown as { uri: string; type: string; name: string };
-    console.log('Enviando imagen al servidor...', { empresa, tdoc, letra, sucur, numero, imagen: rodriimagen });
+    Toast.show({ type: 'info', text1: 'Enviando imagen al servidor...' });
+    // console.log('Enviando imagen al servidor...', { empresa, tdoc, letra, sucur, numero, imagen: rodriimagen });
 
     try {
       const response = await fetch(
