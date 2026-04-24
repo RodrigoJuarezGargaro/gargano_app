@@ -21,6 +21,7 @@ export default function HojaRutaScreen() {
   const [isLoadingRoutes, setIsLoadingRoutes] = useState(false);
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
   const [expandedDetalles, setExpandedDetalles] = useState<Set<string>>(new Set());
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -393,16 +394,29 @@ export default function HojaRutaScreen() {
   const handleTakePhoto = async (empresa: string, tdoc: string, letra: string, sucur: string, numero: string) => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
-      Toast.show({ type: 'error', text1: 'Se necesita permiso para acceder a la cámara.' });
+      Alert.alert('Permiso denegado', 'Se necesita permiso para acceder a la cámara.');
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 0.7,
-      mediaTypes: ['images'],
-    });
-    if (result.canceled) return;
+    Toast.show({ type: 'info', text1: 'Abriendo cámara...' });
+    let result: ImagePicker.ImagePickerResult;
+    try {
+      result = await ImagePicker.launchCameraAsync({
+        quality: 0.7,
+        mediaTypes: 'images' as ImagePicker.MediaType,
+        allowsEditing: false,
+        exif: false,
+      });
+    } catch (e) {
+      Alert.alert('Error', 'No se pudo abrir la cámara.');
+      return;
+    }
+    Alert.alert('Procesando imagen...', 'Por favor espera mientras se procesa la imagen y se envía al servidor.');
+    if (result.canceled || !result.assets?.length) return;
 
     const asset = result.assets[0];
+    const key = `${empresa}-${letra}-${sucur}-${numero}`;
+    setUploadingKey(key);
+
     const formData = new FormData();
     formData.append('empresa', empresa);
     formData.append('tdoc', tdoc);
@@ -415,10 +429,6 @@ export default function HojaRutaScreen() {
       name: `foto_${letra}-${sucur}-${numero}.jpg`,
     } as unknown as Blob);
 
-    const rodriimagen = formData.get('imagen') as unknown as { uri: string; type: string; name: string };
-    Toast.show({ type: 'info', text1: 'Enviando imagen al servidor...' });
-    // console.log('Enviando imagen al servidor...', { empresa, tdoc, letra, sucur, numero, imagen: rodriimagen });
-
     try {
       const response = await fetch(
         'https://gargano-proxy.vercel.app/api/proxy?endpoint=envio_imagen_remito_app',
@@ -429,14 +439,14 @@ export default function HojaRutaScreen() {
       );
       const data = await response.json();
       if (!response.ok) {
-        console.error('Error enviando imagen:', data);
-        Toast.show({ type: 'error', text1: data?.error ? JSON.stringify(data.error) : 'No se pudo enviar la imagen.' });
+        Alert.alert('Error', data?.error ? JSON.stringify(data.error) : 'No se pudo enviar la imagen.');
         return;
       }
-      Toast.show({ type: 'success', text1: 'Imagen enviada correctamente.' });
+      Alert.alert('Éxito', 'Imagen enviada correctamente.');
     } catch (error) {
-      console.error('Error enviando imagen:', error);
-      Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
+      Alert.alert('Error', 'No se pudo conectar con el servidor.');
+    } finally {
+      setUploadingKey(null);
     }
   };
 
@@ -677,9 +687,13 @@ export default function HojaRutaScreen() {
                                     <Text style={styles.partialButtonText}>Parcial</Text>
                                   </Pressable>
                                   <Pressable
-                                    onPress={() => handleTakePhoto(empresa, tdoc, letra, sucur, numero)}
-                                    style={styles.cameraButton}>
-                                    <Ionicons name="camera-outline" size={15} color="#C8D0F0" />
+                                    onPress={() => uploadingKey === null && handleTakePhoto(empresa, tdoc, letra, sucur, numero)}
+                                    style={[styles.cameraButton, uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` && { opacity: 0.4 }]}>
+                                    <Ionicons
+                                      name={uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` ? 'cloud-upload-outline' : 'camera-outline'}
+                                      size={15}
+                                      color="#C8D0F0"
+                                    />
                                   </Pressable>
                                 </View>
                               )}

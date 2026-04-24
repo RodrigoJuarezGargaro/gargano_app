@@ -24,7 +24,11 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.rjuarezsorganization.garganologistica"
+      "package": "com.rjuarezsorganization.garganologistica",
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ]
     },
     "web": {
       "output": "static",
@@ -42,6 +46,14 @@
         {
           "photosPermission": "La app accede a tus fotos para registrar eventualidades.",
           "cameraPermission": "La app usa la cámara para registrar eventualidades en las entregas."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "La app usa tu ubicación para registrar la posición de las entregas.",
+          "locationWhenInUsePermission": "La app usa tu ubicación para registrar la posición de las entregas.",
+          "isIosBackgroundLocationEnabled": false
         }
       ],
       [
