@@ -402,51 +402,91 @@ export default function HojaRutaScreen() {
     try {
       result = await ImagePicker.launchCameraAsync({
         quality: 0.7,
-        mediaTypes: 'images' as ImagePicker.MediaType,
+        mediaTypes: ['images'],
         allowsEditing: false,
         exif: false,
       });
     } catch (e) {
-      Alert.alert('Error', 'No se pudo abrir la cámara.');
+      const msg = e instanceof Error ? e.message : String(e);
+      // En algunos Android el proceso de cámara termina con una excepción aunque la foto se sacó.
+      // Si el mensaje es de cancelación o de activity result, lo ignoramos silenciosamente.
+      const isBenign = msg.includes('cancel') || msg.includes('E_PICKER_CANCELLED') || msg.includes('activity');
+      if (!isBenign) {
+        Alert.alert('Error al abrir la cámara', msg);
+      }
       return;
     }
-    Alert.alert('Procesando imagen...', 'Por favor espera mientras se procesa la imagen y se envía al servidor.');
+
     if (result.canceled || !result.assets?.length) return;
 
     const asset = result.assets[0];
     const key = `${empresa}-${letra}-${sucur}-${numero}`;
     setUploadingKey(key);
 
-    const formData = new FormData();
-    formData.append('empresa', empresa);
-    formData.append('tdoc', tdoc);
-    formData.append('letra', letra);
-    formData.append('sucur', sucur);
-    formData.append('numero', numero);
-    formData.append('imagen', {
+    const imagePayload = {
       uri: asset.uri,
       type: asset.mimeType ?? 'image/jpeg',
       name: `foto_${letra}-${sucur}-${numero}.jpg`,
-    } as unknown as Blob);
+    } as unknown as Blob;
+
+    const guardarImagen = async () => {
+      const formData = new FormData();
+      formData.append('empresa', empresa);
+      formData.append('tdoc', tdoc);
+      formData.append('letra', letra);
+      formData.append('sucur', sucur);
+      formData.append('numero', numero);
+      formData.append('imagen', imagePayload);
+
+      try {
+        const response = await fetch(
+          'https://gargano-proxy.vercel.app/api/proxy?endpoint=guardar_imagen_remito_app',
+          { method: 'POST', body: formData }
+        );
+        const data = await response.json();
+        if (!response.ok) {
+          Alert.alert('Error', data?.error ? JSON.stringify(data.error) : 'No se pudo guardar la imagen.');
+          return;
+        }
+        Alert.alert('Éxito', 'Imagen guardada correctamente.');
+      } catch (error) {
+        Alert.alert('Error', 'No se pudo conectar con el servidor.');
+      } finally {
+        setUploadingKey(null);
+      }
+    };
 
     try {
-      const response = await fetch(
-        'https://gargano-proxy.vercel.app/api/proxy?endpoint=envio_imagen_remito_app',
-        {
-          method: 'POST',
-          body: formData,
-        }
+      // Paso 1: validar imagen con Gemini
+      const validarFormData = new FormData();
+      validarFormData.append('imagen', imagePayload);
+
+      const validarResponse = await fetch(
+        'https://gargano-proxy.vercel.app/api/proxy?endpoint=validar_imagen_remito_app',
+        { method: 'POST', body: validarFormData }
       );
-      const data = await response.json();
-      if (!response.ok) {
-        Alert.alert('Error', data?.error ? JSON.stringify(data.error) : 'No se pudo enviar la imagen.');
-        return;
+      const validarData = await validarResponse.json();
+
+      if (validarResponse.status === 200 && validarData?.es_valida) {
+        // Imagen válida, guardar directamente
+        await guardarImagen();
+      } else if (validarResponse.status === 400) {
+        setUploadingKey(null);
+        Alert.alert('Error', validarData?.error ? JSON.stringify(validarData.error) : 'La imagen no es válida.');
+      } else {
+        // 422 (rechazada por Gemini) o 502 (API caída): consultar al usuario
+        Alert.alert(
+          'Problema con la validación',
+          'Hubo un problema con la validacion de la imagen. ¿Guardar de todos modos?',
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => setUploadingKey(null) },
+            { text: 'Guardar de todos modos', onPress: guardarImagen },
+          ]
+        );
       }
-      Alert.alert('Éxito', 'Imagen enviada correctamente.');
     } catch (error) {
-      Alert.alert('Error', 'No se pudo conectar con el servidor.');
-    } finally {
       setUploadingKey(null);
+      Alert.alert('Error', 'No se pudo conectar con el servidor.');
     }
   };
 
@@ -660,12 +700,23 @@ export default function HojaRutaScreen() {
                               )}
 
                               {confirmado ? (
-                                <Pressable
-                                  onPress={() => handleUndoConfirmation(hruta_d, cliente, empresa, tdoc, letra, sucur, numero, fecha)}
-                                  style={styles.undoConfirmButton}>
-                                  <Ionicons name="close-circle-outline" size={13} color="#F9E8E8" />
-                                  <Text style={styles.undoConfirmButtonText}>Anular confirmacion</Text>
-                                </Pressable>
+                                <View style={styles.actionButtonsRow}>
+                                  <Pressable
+                                    onPress={() => handleUndoConfirmation(hruta_d, cliente, empresa, tdoc, letra, sucur, numero, fecha)}
+                                    style={styles.undoConfirmButton}>
+                                    <Ionicons name="close-circle-outline" size={13} color="#F9E8E8" />
+                                    <Text style={styles.undoConfirmButtonText}>Anular confirmacion</Text>
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={() => uploadingKey === null && handleTakePhoto(empresa, tdoc, letra, sucur, numero)}
+                                    style={[styles.cameraButton, uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` && { opacity: 0.4 }]}>
+                                    <Ionicons
+                                      name={uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` ? 'cloud-upload-outline' : 'camera-outline'}
+                                      size={15}
+                                      color="#C8D0F0"
+                                    />
+                                  </Pressable>
+                                </View>
                               ) : (
                                 <View style={styles.actionButtonsRow}>
                                   <Pressable
@@ -685,15 +736,6 @@ export default function HojaRutaScreen() {
                                     style={styles.partialButton}>
                                     <Ionicons name="git-branch-outline" size={13} color="#F2E8FF" />
                                     <Text style={styles.partialButtonText}>Parcial</Text>
-                                  </Pressable>
-                                  <Pressable
-                                    onPress={() => uploadingKey === null && handleTakePhoto(empresa, tdoc, letra, sucur, numero)}
-                                    style={[styles.cameraButton, uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` && { opacity: 0.4 }]}>
-                                    <Ionicons
-                                      name={uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` ? 'cloud-upload-outline' : 'camera-outline'}
-                                      size={15}
-                                      color="#C8D0F0"
-                                    />
                                   </Pressable>
                                 </View>
                               )}
@@ -1061,7 +1103,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    alignSelf: 'flex-start',
     paddingHorizontal: 10,
     height: 30,
     borderRadius: 6,

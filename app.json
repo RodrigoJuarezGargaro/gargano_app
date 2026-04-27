@@ -11,6 +11,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.rjuarezsorganization.garganologistica",
+      "config": {
+        "googleMapsApiKey": "TU_API_KEY_IOS_ACÁ"
+      },
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -28,7 +31,12 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION"
-      ]
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyB17fwcFaFxrxz_tTpnnjMA7IlzLYmsJzM"
+        }
+      }
     },
     "web": {
       "output": "static",
