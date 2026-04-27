@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
@@ -22,6 +22,11 @@ export default function HojaRutaScreen() {
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
   const [expandedDetalles, setExpandedDetalles] = useState<Set<string>>(new Set());
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [validationModal, setValidationModal] = useState<{
+    visible: boolean;
+    details: string;
+    onConfirm: () => void;
+  }>({ visible: false, details: '', onConfirm: () => {} });
 
   useEffect(() => {
     const loadSession = async () => {
@@ -475,15 +480,17 @@ export default function HojaRutaScreen() {
         Alert.alert('Error', validarData?.error ? JSON.stringify(validarData.error) : 'La imagen no es válida.');
       } else {
         console.error('Error validando imagen:', validarResponse.status, validarData);
-        // 422 (rechazada por Gemini) o 502 (API caída): consultar al usuario
-        Alert.alert(
-          'Problema con la validación',
-          'Hubo un problema con la validacion de la imagen. ¿Guardar de todos modos?',
-          [
-            { text: 'Cancelar', style: 'cancel', onPress: () => setUploadingKey(null) },
-            { text: 'Guardar de todos modos', onPress: guardarImagen },
-          ]
-        );
+        let detalles = '';
+        if (validarResponse.status === 422) {
+          const motivo = validarData?.motivo_rechazo ? String(validarData.motivo_rechazo) : '';
+          const desc = validarData?.descripcion ? String(validarData.descripcion) : '';
+          detalles = [motivo, desc].filter(Boolean).join('\n') || 'Imagen rechazada por Gemini.';
+        } else if (validarResponse.status === 502) {
+          detalles = validarData?.error ? String(validarData.error) : 'API de Gemini no disponible.';
+        } else {
+          detalles = validarData?.error ? JSON.stringify(validarData.error) : 'Error desconocido.';
+        }
+        setValidationModal({ visible: true, details: detalles, onConfirm: guardarImagen });
       }
     } catch (error) {
       setUploadingKey(null);
@@ -710,12 +717,13 @@ export default function HojaRutaScreen() {
                                   </Pressable>
                                   <Pressable
                                     onPress={() => uploadingKey === null && handleTakePhoto(empresa, tdoc, letra, sucur, numero)}
-                                    style={[styles.cameraButton, uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` && { opacity: 0.4 }]}>
-                                    <Ionicons
-                                      name={uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` ? 'cloud-upload-outline' : 'camera-outline'}
-                                      size={15}
-                                      color="#C8D0F0"
-                                    />
+                                    style={styles.cameraButton}
+                                    disabled={uploadingKey !== null}>
+                                    {uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` ? (
+                                      <ActivityIndicator size="small" color="#C8D0F0" />
+                                    ) : (
+                                      <Ionicons name="camera-outline" size={15} color="#C8D0F0" />
+                                    )}
                                   </Pressable>
                                 </View>
                               ) : (
@@ -752,6 +760,47 @@ export default function HojaRutaScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        transparent
+        visible={validationModal.visible}
+        animationType="fade"
+        onRequestClose={() => {
+          setValidationModal(v => ({ ...v, visible: false }));
+          setUploadingKey(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Problema con la validación</Text>
+            <Text style={styles.modalMessage}>Hubo un problema al validar la imagen.</Text>
+            <View style={styles.modalDetailsBox}>
+              <Text style={styles.modalDetailsText}>{validationModal.details}</Text>
+            </View>
+            <Text style={styles.modalQuestion}>¿Guardar de todos modos?</Text>
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={styles.modalCancelButton}
+                onPress={() => {
+                  setValidationModal(v => ({ ...v, visible: false }));
+                  setUploadingKey(null);
+                }}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={styles.modalConfirmButton}
+                onPress={() => {
+                  setValidationModal(v => ({ ...v, visible: false }));
+                  validationModal.onConfirm();
+                }}
+              >
+                <Text style={styles.modalConfirmText}>Guardar de todos modos</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1116,5 +1165,84 @@ const styles = StyleSheet.create({
     color: '#F1C0C0',
     fontSize: 11,
     fontWeight: '700',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalBox: {
+    backgroundColor: '#151B29',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#44506A',
+    padding: 20,
+    width: '100%',
+  },
+  modalTitle: {
+    color: '#E8ECF7',
+    fontSize: 17,
+    fontWeight: '700',
+    marginBottom: 8,
+  },
+  modalMessage: {
+    color: '#B0BAD0',
+    fontSize: 14,
+    marginBottom: 12,
+  },
+  modalDetailsBox: {
+    backgroundColor: '#0D1120',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2E3D56',
+    padding: 10,
+    marginBottom: 14,
+  },
+  modalDetailsText: {
+    color: '#8A96AC',
+    fontSize: 12,
+  },
+  modalQuestion: {
+    color: '#DDE3F2',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 16,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'flex-end',
+  },
+  modalCancelButton: {
+    paddingHorizontal: 16,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#1A2540',
+    borderWidth: 1,
+    borderColor: '#44506A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCancelText: {
+    color: '#B0BAD0',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalConfirmButton: {
+    paddingHorizontal: 16,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#1E4A2E',
+    borderWidth: 1,
+    borderColor: '#2E6B42',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalConfirmText: {
+    color: '#A0E0B0',
+    fontSize: 13,
+    fontWeight: '600',
   },
 });
