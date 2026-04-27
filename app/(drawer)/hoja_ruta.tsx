@@ -474,6 +474,7 @@ export default function HojaRutaScreen() {
         setUploadingKey(null);
         Alert.alert('Error', validarData?.error ? JSON.stringify(validarData.error) : 'La imagen no es válida.');
       } else {
+        console.error('Error validando imagen:', validarResponse.status, validarData);
         // 422 (rechazada por Gemini) o 502 (API caída): consultar al usuario
         Alert.alert(
           'Problema con la validación',
