@@ -1,8 +1,10 @@
+import { useLocation } from '@/hooks/use-location';
 import { clearUserSession } from '@/services/session-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -22,6 +24,7 @@ export default function HojaRutaScreen() {
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
   const [expandedDetalles, setExpandedDetalles] = useState<Set<string>>(new Set());
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const { requestAndFetch: fetchLocation } = useLocation();
   const [validationModal, setValidationModal] = useState<{
     visible: boolean;
     details: string;
@@ -397,6 +400,24 @@ export default function HojaRutaScreen() {
   };
 
   const handleTakePhoto = async (empresa: string, tdoc: string, letra: string, sucur: string, numero: string) => {
+    const coords = await fetchLocation();
+    let place: Location.LocationGeocodedAddress | null = null;
+
+    if (coords) {
+      try {
+        const [result] = await Location.reverseGeocodeAsync({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+        });
+        place = result ?? null;
+      } catch {
+        console.log('[handleTakePhoto] Ubicación coords:', JSON.stringify(coords));
+        console.warn('[handleTakePhoto] No se pudo hacer geocodificación inversa.');
+      }
+    } else {
+      console.warn('[handleTakePhoto] No se pudo obtener la ubicación.');
+    }
+    
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permiso denegado', 'Se necesita permiso para acceder a la cámara.');
@@ -442,6 +463,24 @@ export default function HojaRutaScreen() {
       formData.append('sucur', sucur);
       formData.append('numero', numero);
       formData.append('imagen', imagePayload);
+      if (coords) {
+        formData.append('coordenadas', JSON.stringify({
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          accuracy: coords.accuracy,
+        }));
+      }
+      if (place) {
+        formData.append('ubicacion', JSON.stringify({
+          ciudad:       place.city          ?? null,
+          localidad:    place.district      ?? null,
+          provincia:    place.region        ?? null,
+          pais:         place.country       ?? null,
+          calle:        place.street        ?? null,
+          numero:       place.streetNumber  ?? null,
+          codigoPostal: place.postalCode    ?? null,
+        }));
+      }
 
       try {
         const response = await fetch(
