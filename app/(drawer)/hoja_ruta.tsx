@@ -1144,6 +1144,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 6,
     marginTop: 8,
+    justifyContent: 'center', // Centra los botones en el eje X
   },
   confirmButton: {
     flexDirection: 'row',
@@ -1202,6 +1203,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A2040',
     borderWidth: 1,
     borderColor: '#3A4A70',
+    marginTop: 0, // Alineación vertical
+    marginBottom: 0, // Alineación vertical
+    alignSelf: 'center', // Centrado en el eje Y dentro del row
   },
   undoConfirmButton: {
     flexDirection: 'row',
@@ -1213,7 +1217,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#5A2323',
     borderWidth: 1,
     borderColor: '#8A3A3A',
-    marginTop: 8,
+    marginTop: 0, // Alineación vertical
+    marginBottom: 0, // Alineación vertical
+    alignSelf: 'center', // Centrado en el eje Y dentro del row
   },
   undoConfirmButtonText: {
     color: '#F1C0C0',
