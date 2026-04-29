@@ -408,6 +408,12 @@ export default function HojaRutaScreen() {
   };
 
   const handleTakePhoto = async (empresa: string, tdoc: string, letra: string, sucur: string, numero: string) => {
+    const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
+    if (locationStatus !== 'granted') {
+      Alert.alert('Permiso de ubicación requerido', 'Se necesita permiso de ubicación para sacar la foto. Por favor, habilítalo en la configuración.');
+      return;
+    }
+
     const coords = await fetchLocation();
     let place: Location.LocationGeocodedAddress | null = null;
 
