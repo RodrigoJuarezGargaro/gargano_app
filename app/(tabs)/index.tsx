@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -114,9 +115,11 @@ export default function HomeScreen() {
         style={styles.keyboardWrapper}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
           <View style={styles.brandBlock}>
-            <View style={styles.logoBox}>
-              <Text style={styles.logoLetter}>G</Text>
-            </View>
+            <Image
+              source={require('@/assets/images/favicon.png')}
+              style={styles.logoImage}
+              resizeMode="contain"
+            />
             <View>
               <Text style={styles.brandTitle}>Gargano Logistica</Text>
               <Text style={styles.brandSubtitle}>
@@ -209,21 +212,14 @@ const styles = StyleSheet.create({
   brandBlock: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 10,
     marginBottom: 54,
   },
-  logoBox: {
-    width: 44,
-    height: 44,
+  logoImage: {
+    width: 60,
+    height: 60,
     borderRadius: 10,
-    backgroundColor: '#D4D7DE',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  logoLetter: {
-    color: '#171A20',
-    fontSize: 26,
-    fontWeight: '800',
   },
   brandTitle: {
     color: '#E8ECF7',

@@ -106,6 +106,14 @@ export default function HojaRutaScreen() {
     }
   };
 
+  const formateoFecha = (fecha: string) => {
+    const date = new Date(fecha);
+    const dia = String(date.getDate()).padStart(2, '0');
+    const mes = String(date.getMonth() + 1).padStart(2, '0');
+    const anio = date.getFullYear();
+    return `${dia}/${mes}/${anio}`;
+  };
+
   const handleLogout = async () => {
     await clearUserSession();
     router.replace('/');
@@ -634,6 +642,7 @@ export default function HojaRutaScreen() {
               const rutaObj = typeof ruta === 'object' && ruta !== null ? (ruta as Record<string, unknown>) : {};
               const hruta_d = String(rutaObj.hruta_d || `Hoja ${index + 1}`);
               const fecha = String(rutaObj.fecha || 'Sin fecha');
+              const fechaFormateada = fecha !== 'Sin fecha' ? formateoFecha(fecha) : 'Sin fecha';
               const tractor = String(rutaObj.tractor || '-').trim();
               const estado = String(rutaObj.estado || '-').trim();
               const chofer = String(rutaObj.cod_chof || '-').trim();
@@ -659,7 +668,7 @@ export default function HojaRutaScreen() {
                         <Text style={styles.routeCardTitle}>HR #{hruta_d}</Text>
                         <View style={styles.routeCardDateRow}>
                           <Ionicons name="calendar-outline" size={15} color="#926FA9" />
-                          <Text style={styles.routeCardDate}>{fecha}</Text>
+                          <Text style={styles.routeCardDate}>{fechaFormateada}</Text>
                         </View>
                       </View>
                       <View style={styles.routeCardInfoRow}>
@@ -914,7 +923,7 @@ const styles = StyleSheet.create({
   },
   greetingTitle: {
     color: '#E5E9F5',
-    fontSize: 30,
+    fontSize: 20,
     fontWeight: '700',
     marginBottom: 4,
   },
@@ -984,7 +993,7 @@ const styles = StyleSheet.create({
   },
   routeCardTitle: {
     color: '#E8ECF7',
-    fontSize: 18,
+    fontSize: 24,
     fontWeight: '800',
   },
   routeCardDateRow: {
