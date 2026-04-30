@@ -75,6 +75,10 @@ export default function HomeScreen() {
         return;
       }
 
+      // Guardar id_perfil y nombre_usuario en session
+      await AsyncStorage.setItem('id_perfil', String(responseData.user.id_perfil));
+      await AsyncStorage.setItem('nombre_perfil', String(responseData.user.perfil_nombre));
+      await AsyncStorage.setItem('nombre_usuario', String(responseData.user.nombre_usuario));
       await AsyncStorage.setItem('userSession', JSON.stringify(responseData.user));
       router.replace('/hoja_ruta');
     } catch (error) {
@@ -162,7 +166,7 @@ export default function HomeScreen() {
               <Pressable
                 accessibilityLabel={secureTextEntry ? 'Mostrar contrasena' : 'Ocultar contrasena'}
                 hitSlop={10}
-                // onPress={() => setSecureTextEntry((current) => !current)}
+                onPress={() => setSecureTextEntry((current) => !current)}
                 style={styles.eyeButton}>
                 <Ionicons name={secureTextEntry ? 'eye-off-outline' : 'eye-outline'} size={20} color="#6D7484" />
               </Pressable>

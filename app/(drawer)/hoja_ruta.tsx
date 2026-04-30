@@ -31,6 +31,7 @@ export default function HojaRutaScreen() {
     onConfirm: () => void;
   }>({ visible: false, details: '', onConfirm: () => {} });
 
+
   useEffect(() => {
     const loadSession = async () => {
       const session = await AsyncStorage.getItem('userSession');
@@ -47,39 +48,42 @@ export default function HojaRutaScreen() {
         setName(sessionData.nombre_usuario);
         displayName = sessionData.nombre;
       } else if (sessionData.login) {
-        //Ver bien que hacer aca. Porque si no tenemos el dato del nombre, no acepta valores alternativos o de fallback. 
-        // Entonces si el backend no nos devuelve el nombre del usuario, quedamos con un "Usuario" generico en toda la app, lo cual no es ideal. 
-        // Por eso se me ocurrio usar el login como fallback, pero no se si es lo mejor.
         setUserName(String(sessionData.nombre || sessionData.login).trim());
         setName(sessionData.login);
         displayName = String(sessionData.nombre || sessionData.login).trim();
       }
 
-      await fetchHojaRuta(displayName);
+      const rol = String(sessionData.perfil_nombre || sessionData.rol || '').trim().toLowerCase();
+      await fetchHojaRuta(displayName, rol);
     };
 
     loadSession();
   }, [router]);
 
-  const fetchHojaRuta = async (nombre: string) => {
+  const fetchHojaRuta = async (nombre: string, rol: string) => {
     setIsLoadingRoutes(true);
     try {
-      const cleanName = nombre.trim();
-      if (!cleanName) {
-        console.warn('Nombre vacío, no se puede buscar hoja de ruta');
-        setIsLoadingRoutes(false);
-        return;
-      }
-
+      let response: Response;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), API_RESPONSE_TIMEOUT_MS);
-      let response: Response;
-
       try {
-        response = await fetch(
-          `https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_hoja_ruta/${encodeURIComponent(cleanName)}`,
-          { signal: controller.signal }
-        );
+        if (rol === 'analista') {
+          response = await fetch(
+            'https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_hoja_ruta_diaria',
+            { method: 'GET', signal: controller.signal }
+          );
+        } else {
+          const cleanName = nombre.trim();
+          if (!cleanName) {
+            console.warn('Nombre vacío, no se puede buscar hoja de ruta');
+            setIsLoadingRoutes(false);
+            return;
+          }
+          response = await fetch(
+            `https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_hoja_ruta/${encodeURIComponent(cleanName)}`,
+            { signal: controller.signal }
+          );
+        }
       } finally {
         clearTimeout(timeoutId);
       }
@@ -99,7 +103,6 @@ export default function HojaRutaScreen() {
         console.error('Hoja de ruta timeout: el backend tardo mas de 120 segundos en responder.');
         return;
       }
-
       console.error('Error fetching hoja de ruta:', error);
     } finally {
       setIsLoadingRoutes(false);
@@ -477,6 +480,7 @@ export default function HojaRutaScreen() {
       formData.append('sucur', sucur);
       formData.append('numero', numero);
       formData.append('imagen', imagePayload);
+      formData.append('usuario', userName);
       if (coords) {
         formData.append('coordenadas', JSON.stringify({
           latitude: coords.latitude,
@@ -772,7 +776,7 @@ export default function HojaRutaScreen() {
                                   <Pressable
                                     onPress={() => uploadingKey === null && handleTakePhoto(empresa, tdoc, letra, sucur, numero)}
                                     style={styles.cameraButton}
-                                    disabled={uploadingKey !== null}>
+                                    disabled={uploadingKey !== null && uploadingKey === `${empresa}-${letra}-${sucur}-${numero}`}>
                                     {uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` ? (
                                       <ActivityIndicator size="small" color="#C8D0F0" />
                                     ) : (
@@ -800,6 +804,19 @@ export default function HojaRutaScreen() {
                                     <Ionicons name="git-branch-outline" size={13} color="#F2E8FF" />
                                     <Text style={styles.partialButtonText}>Parcial</Text>
                                   </Pressable>
+                                  {/* {(det.img_path || det.img_archivo) && (
+                                    <Pressable
+                                      style={[styles.partialButton, { marginTop: 8 }]}
+                                      onPress={() => {
+                                        // Aquí puedes abrir un modal o navegar a una pantalla para mostrar la imagen
+                                        // Por ahora solo muestra un toast
+                                        Toast.show({ type: 'info', text1: 'Ver Imagen', text2: 'Funcionalidad pendiente de implementar.' });
+                                      }}
+                                    >
+                                      <Ionicons name="image-outline" size={15} color="#C0D0F5" />
+                                      <Text style={styles.partialButtonText}>Ver Imagen</Text>
+                                    </Pressable>
+                                  )} */}
                                 </View>
                               )}
                             </View>
