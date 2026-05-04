@@ -764,7 +764,14 @@ export default function HojaRutaScreen() {
                                   {empresaNombre ? <Text style={styles.detalleMetaHalf}>{empresaNombre}</Text> : null}
                                 </>
                               )}
-
+                              {
+                                det.img_estado == 1 && (
+                                  <View style={styles.imagenEstadoRow}>
+                                    <Ionicons name="checkmark-circle-outline" size={13} color="#4BB543" style={{ marginRight: 5 }} />
+                                    <Text style={styles.imagenEstadoText}>Imagen cargada</Text>
+                                  </View>
+                                )
+                              }
                               {confirmado ? (
                                 <View style={styles.actionButtonsRow}>
                                   <Pressable
@@ -877,6 +884,23 @@ export default function HojaRutaScreen() {
 }
 
 const styles = StyleSheet.create({
+    imagenEstadoRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: 'rgba(76, 175, 80, 0.08)', // verde suave
+      borderRadius: 6,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      marginTop: 4,
+      marginBottom: 2,
+      alignSelf: 'flex-start',
+    },
+    imagenEstadoText: {
+      color: '#4BB543',
+      fontWeight: 'bold',
+      fontSize: 13,
+      marginLeft: 2,
+    },
   safeArea: {
     flex: 1,
     backgroundColor: '#06080D',
