@@ -174,8 +174,13 @@ export default function HomeScreen() {
 
             <Pressable onPress={handleLogin} disabled={isLoggingIn} style={[styles.loginButton, isLoggingIn && styles.loginButtonDisabled]}>
               {isLoggingIn
-                ? <ActivityIndicator size="small" color="#F6F1FB" />
-                : <Text style={styles.loginButtonText}>Iniciar sesion</Text>
+                ? <ActivityIndicator 
+                    size="small" 
+                    color="#F6F1FB" />
+                : <Text 
+                    style={styles.loginButtonText}>
+                      Iniciar sesion
+                  </Text>
               }
             </Pressable>
           </View>

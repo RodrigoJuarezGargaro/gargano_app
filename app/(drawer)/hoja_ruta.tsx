@@ -14,6 +14,16 @@ import Toast from 'react-native-toast-message';
 
 const API_RESPONSE_TIMEOUT_MS = 120000;
 
+const MOTIVOS_RECHAZO = [
+  'Cliente ausente',
+  'Local cerrado',
+  'Dirección incorrecta',
+  'Mercadería dañada',
+  'Cliente rechazó la entrega',
+  'Acceso denegado al local',
+  'Otro',
+];
+
 export default function HojaRutaScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -30,6 +40,21 @@ export default function HojaRutaScreen() {
     details: string;
     onConfirm: () => void;
   }>({ visible: false, details: '', onConfirm: () => {} });
+
+  const [rechazarModal, setRechazarModal] = useState<{
+    visible: boolean;
+    selectedMotivo: string | null;
+    params: {
+      hruta_d: string;
+      cliente: string;
+      empresa: string;
+      tdoc: string;
+      letra: string;
+      sucursal: string;
+      numero: string;
+      fecha: string;
+    } | null;
+  }>({ visible: false, selectedMotivo: null, params: null });
 
 
   useEffect(() => {
@@ -213,11 +238,13 @@ export default function HojaRutaScreen() {
                 );
                 const insertarData = await insertarResponse.json();
                 if (!insertarResponse.ok) {
-                  Toast.show({ type: 'error', text1: insertarData?.error ? JSON.stringify(insertarData.error) : 'No se pudo insertar el remito.' });
+                  // Toast.show({ type: 'error', text1: insertarData?.error ? JSON.stringify(insertarData.error) : 'No se pudo insertar el remito.' });
+                  console.error('Error insertando remito:', insertarResponse.status, insertarData);
                   return;
                 }
 
                 if (!insertarData?.insertado) {
+                  console.error('Error insertando remito:', insertarResponse.status, insertarData);
                   Toast.show({ type: 'error', text1: 'No se pudo insertar el remito.' });
                   return;
                 }
@@ -361,53 +388,53 @@ export default function HojaRutaScreen() {
     numero: string,
     fecha: string,
   ) => {
-    Alert.alert(
-      'Rechazar remito',
-      `¿Rechazar el remito de ${cliente}?\nHoja de ruta: ${hruta_d}`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
+    setRechazarModal({
+      visible: true,
+      selectedMotivo: null,
+      params: { hruta_d, cliente, empresa, tdoc, letra, sucursal, numero, fecha },
+    });
+  };
+
+  const confirmRechazar = async () => {
+    const p = rechazarModal.params;
+    const motivo = rechazarModal.selectedMotivo;
+    if (!p || !motivo) return;
+    setRechazarModal(v => ({ ...v, visible: false }));
+    try {
+      const rechazarResponse = await fetch(
+        'https://gargano-proxy.vercel.app/api/proxy?endpoint=rechazar_remito_app',
         {
-          text: 'Rechazar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              const rechazarResponse = await fetch(
-                'https://gargano-proxy.vercel.app/api/proxy?endpoint=rechazar_remito_app',
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                  body: JSON.stringify({
-                    empresa,
-                    tdoc,
-                    letra,
-                    sucursal,
-                    numero,
-                    usuario: userName,
-                    hruta_d: parseInt(hruta_d, 10),
-                    fecha,
-                  }),
-                }
-              );
-              const rechazarData = await rechazarResponse.json();
-              if (!rechazarResponse.ok) {
-                Toast.show({ type: 'error', text1: rechazarData?.error ? JSON.stringify(rechazarData.error) : 'No se pudo rechazar el remito.' });
-                return;
-              }
-              if (rechazarData?.rechazado) {
-                updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, true);
-                Toast.show({ type: 'success', text1: 'Remito rechazado correctamente.' });
-                await fetchHojaRuta(userName);
-              } else {
-                Toast.show({ type: 'error', text1: 'No se pudo rechazar el remito.' });
-              }
-            } catch (error) {
-              console.error('Error rechazando remito:', error);
-              Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
-            }
-          },
-        },
-      ]
-    );
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            empresa: p.empresa,
+            tdoc: p.tdoc,
+            letra: p.letra,
+            sucursal: p.sucursal,
+            numero: p.numero,
+            usuario: userName,
+            hruta_d: parseInt(p.hruta_d, 10),
+            fecha: p.fecha,
+            motivo,
+          }),
+        }
+      );
+      const rechazarData = await rechazarResponse.json();
+      if (!rechazarResponse.ok) {
+        Toast.show({ type: 'error', text1: rechazarData?.error ? JSON.stringify(rechazarData.error) : 'No se pudo rechazar el remito.' });
+        return;
+      }
+      if (rechazarData?.rechazado) {
+        updateDetalleOptimistically(p.empresa, p.tdoc, p.letra, p.sucursal, p.numero, true);
+        Toast.show({ type: 'success', text1: 'Remito rechazado correctamente.' });
+        await fetchHojaRuta(userName);
+      } else {
+        Toast.show({ type: 'error', text1: 'No se pudo rechazar el remito.' });
+      }
+    } catch (error) {
+      console.error('Error rechazando remito:', error);
+      Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
+    }
   };
 
   const handleTakePhoto = async (empresa: string, tdoc: string, letra: string, sucur: string, numero: string) => {
@@ -838,6 +865,58 @@ export default function HojaRutaScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        transparent
+        visible={rechazarModal.visible}
+        animationType="fade"
+        onRequestClose={() => setRechazarModal(v => ({ ...v, visible: false }))}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Rechazar remito</Text>
+            {rechazarModal.params && (
+              <Text style={styles.modalMessage}>
+                {rechazarModal.params.cliente} — HR #{rechazarModal.params.hruta_d}
+              </Text>
+            )}
+            <Text style={styles.rechazarMotivoLabel}>Seleccioná el motivo del rechazo:</Text>
+            <ScrollView style={styles.rechazarMotivoList} contentContainerStyle={{ gap: 6 }}>
+              {MOTIVOS_RECHAZO.map(motivo => {
+                const selected = rechazarModal.selectedMotivo === motivo;
+                return (
+                  <Pressable
+                    key={motivo}
+                    style={[styles.rechazarMotivoItem, selected && styles.rechazarMotivoItemSelected]}
+                    onPress={() => setRechazarModal(v => ({ ...v, selectedMotivo: motivo }))}
+                  >
+                    <View style={[styles.rechazarMotivoRadio, selected && styles.rechazarMotivoRadioSelected]}>
+                      {selected && <View style={styles.rechazarMotivoRadioDot} />}
+                    </View>
+                    <Text style={[styles.rechazarMotivoText, selected && styles.rechazarMotivoTextSelected]}>{motivo}</Text>
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={styles.modalCancelButton}
+                onPress={() => setRechazarModal(v => ({ ...v, visible: false }))}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.rejectModalConfirmButton, !rechazarModal.selectedMotivo && styles.rejectModalConfirmButtonDisabled]}
+                onPress={confirmRechazar}
+                disabled={!rechazarModal.selectedMotivo}
+              >
+                <Ionicons name="close-circle-outline" size={14} color={rechazarModal.selectedMotivo ? '#F1C0C0' : '#7A5A5A'} />
+                <Text style={[styles.rejectModalConfirmText, !rechazarModal.selectedMotivo && styles.rejectModalConfirmTextDisabled]}>Rechazar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         transparent
@@ -1345,5 +1424,81 @@ const styles = StyleSheet.create({
     color: '#A0E0B0',
     fontSize: 13,
     fontWeight: '600',
+  },
+  rechazarMotivoLabel: {
+    color: '#B0BAD0',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  rechazarMotivoList: {
+    maxHeight: 220,
+    marginBottom: 16,
+  },
+  rechazarMotivoItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#2E3D56',
+    backgroundColor: '#0D1120',
+  },
+  rechazarMotivoItemSelected: {
+    borderColor: '#8A3A3A',
+    backgroundColor: '#2A1010',
+  },
+  rechazarMotivoRadio: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#44506A',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rechazarMotivoRadioSelected: {
+    borderColor: '#C05050',
+  },
+  rechazarMotivoRadioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#C05050',
+  },
+  rechazarMotivoText: {
+    color: '#8A96AC',
+    fontSize: 13,
+    flex: 1,
+  },
+  rechazarMotivoTextSelected: {
+    color: '#F1C0C0',
+    fontWeight: '600',
+  },
+  rejectModalConfirmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#5A2323',
+    borderWidth: 1,
+    borderColor: '#8A3A3A',
+    justifyContent: 'center',
+  },
+  rejectModalConfirmButtonDisabled: {
+    backgroundColor: '#2A1A1A',
+    borderColor: '#3A2A2A',
+  },
+  rejectModalConfirmText: {
+    color: '#F1C0C0',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  rejectModalConfirmTextDisabled: {
+    color: '#7A5A5A',
   },
 });
