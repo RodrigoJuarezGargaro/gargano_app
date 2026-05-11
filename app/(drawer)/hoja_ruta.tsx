@@ -770,6 +770,7 @@ export default function HojaRutaScreen() {
                         const numero = String(det.numero || '').trim();
                         const confirmado = Boolean(det.confirmado);
                         const detalleKey = `${index}-${dIndex}`;
+                        const telefono = String(det.telefono || '').trim();
                         const isDetalleExpanded = expandedDetalles.has(detalleKey);
                         return (
                           <View key={`det-${index}-${dIndex}`} style={styles.detalleItem}>
@@ -814,6 +815,13 @@ export default function HojaRutaScreen() {
                                     }
                                   {localidadNombre ? <Text style={styles.detalleMetaHalf}>{localidadNombre}</Text> : null}
                                   {empresaNombre ? <Text style={styles.detalleMetaHalf}>{empresaNombre}</Text> : null}
+                                  {telefono ? (
+                                    <View style={styles.detalleTelefonoRow}>
+                                      <Ionicons name="call-outline" size={13} color="#4A90E2" style={{ marginRight: 5 }} />
+                                      <Text style={styles.detalleTelefonoText}>{telefono}</Text>
+                                    </View>
+                                   ) : null 
+                                  }
                                 </>
                               )}
                               {
@@ -1261,6 +1269,15 @@ const styles = StyleSheet.create({
   },
   detalleCodPostalInline: {
     color: '#B0BBCE',
+    fontSize: 13,
+  },
+  detalleTelefonoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  detalleTelefonoText: {
+    color: '#4A90E2',
     fontSize: 13,
   },
   detalleMetaRow: {
