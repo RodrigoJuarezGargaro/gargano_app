@@ -14,15 +14,7 @@ import Toast from 'react-native-toast-message';
 
 const API_RESPONSE_TIMEOUT_MS = 120000;
 
-const MOTIVOS_RECHAZO = [
-  'Cliente ausente',
-  'Local cerrado',
-  'Dirección incorrecta',
-  'Mercadería dañada',
-  'Cliente rechazó la entrega',
-  'Acceso denegado al local',
-  'Otro',
-];
+let motivosRechazoCache: string[] | null = null;
 
 export default function HojaRutaScreen() {
   const router = useRouter();
@@ -34,12 +26,16 @@ export default function HojaRutaScreen() {
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
   const [expandedDetalles, setExpandedDetalles] = useState<Set<string>>(new Set());
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
+  const [userRol, setUserRol] = useState('');
   const { requestAndFetch: fetchLocation } = useLocation();
   const [validationModal, setValidationModal] = useState<{
     visible: boolean;
     details: string;
     onConfirm: () => void;
   }>({ visible: false, details: '', onConfirm: () => {} });
+
+  const [motivosRechazo, setMotivosRechazo] = useState<string[]>([]);
+  const [isLoadingMotivos, setIsLoadingMotivos] = useState(false);
 
   const [rechazarModal, setRechazarModal] = useState<{
     visible: boolean;
@@ -79,6 +75,7 @@ export default function HojaRutaScreen() {
       }
 
       const rol = String(sessionData.perfil_nombre || sessionData.rol || '').trim().toLowerCase();
+      setUserRol(rol);
       await fetchHojaRuta(displayName, rol);
     };
 
@@ -302,7 +299,7 @@ export default function HojaRutaScreen() {
               if (guardarFechaData?.actualizado) {
                 updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, true);
                 Toast.show({ type: 'success', text1: 'Entrega confirmada y fecha guardada correctamente.' });
-                await fetchHojaRuta(userName);
+                await fetchHojaRuta(userName, userRol);
               } else {
                 Toast.show({ type: 'error', text1: 'No se pudo guardar la fecha de entrega.' });
               }
@@ -364,7 +361,7 @@ export default function HojaRutaScreen() {
               if (anularData?.anulado) {
                 updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, false);
                 Toast.show({ type: 'success', text1: 'Confirmacion anulada correctamente.' });
-                await fetchHojaRuta(userName);
+                await fetchHojaRuta(userName, userRol);
               } else {
                 Toast.show({ type: 'error', text1: 'No se pudo anular el remito.' });
               }
@@ -376,6 +373,34 @@ export default function HojaRutaScreen() {
         },
       ]
     );
+  };
+
+  const loadMotivosRechazo = async () => {
+    if (motivosRechazoCache) {
+      setMotivosRechazo(motivosRechazoCache);
+      return;
+    }
+    setIsLoadingMotivos(true);
+    try {
+      const response = await fetch(
+        'https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_estados_remito_cabecera/rechazo',
+        { method: 'GET' }
+      );
+      if (!response.ok) {
+        Toast.show({ type: 'error', text1: 'No se pudieron cargar los motivos de rechazo.' });
+        return;
+      }
+      const data = await response.json();
+      const motivos: string[] = Array.isArray(data?.estados)
+        ? data.estados.map((e: { nombre: string }) => String(e.nombre))
+        : [];
+      motivosRechazoCache = motivos;
+      setMotivosRechazo(motivos);
+    } catch {
+      Toast.show({ type: 'error', text1: 'No se pudieron cargar los motivos de rechazo.' });
+    } finally {
+      setIsLoadingMotivos(false);
+    }
   };
 
   const handleRejectDelivery = (
@@ -393,6 +418,7 @@ export default function HojaRutaScreen() {
       selectedMotivo: null,
       params: { hruta_d, cliente, empresa, tdoc, letra, sucursal, numero, fecha },
     });
+    loadMotivosRechazo();
   };
 
   const confirmRechazar = async () => {
@@ -415,7 +441,7 @@ export default function HojaRutaScreen() {
             usuario: userName,
             hruta_d: parseInt(p.hruta_d, 10),
             fecha: p.fecha,
-            motivo,
+            motivo_rechazo: motivo,
           }),
         }
       );
@@ -427,7 +453,6 @@ export default function HojaRutaScreen() {
       if (rechazarData?.rechazado) {
         updateDetalleOptimistically(p.empresa, p.tdoc, p.letra, p.sucursal, p.numero, true);
         Toast.show({ type: 'success', text1: 'Remito rechazado correctamente.' });
-        await fetchHojaRuta(userName);
       } else {
         Toast.show({ type: 'error', text1: 'No se pudo rechazar el remito.' });
       }
@@ -626,7 +651,7 @@ export default function HojaRutaScreen() {
               if (parcialData?.entrega_parcial) {
                 updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, true);
                 Toast.show({ type: 'success', text1: 'Entrega parcial registrada correctamente.' });
-                await fetchHojaRuta(userName);
+                await fetchHojaRuta(userName, userRol);
               } else {
                 Toast.show({ type: 'error', text1: 'No se pudo registrar la entrega parcial.' });
               }
@@ -881,23 +906,27 @@ export default function HojaRutaScreen() {
               </Text>
             )}
             <Text style={styles.rechazarMotivoLabel}>Seleccioná el motivo del rechazo:</Text>
-            <ScrollView style={styles.rechazarMotivoList} contentContainerStyle={{ gap: 6 }}>
-              {MOTIVOS_RECHAZO.map(motivo => {
-                const selected = rechazarModal.selectedMotivo === motivo;
-                return (
-                  <Pressable
-                    key={motivo}
-                    style={[styles.rechazarMotivoItem, selected && styles.rechazarMotivoItemSelected]}
-                    onPress={() => setRechazarModal(v => ({ ...v, selectedMotivo: motivo }))}
-                  >
-                    <View style={[styles.rechazarMotivoRadio, selected && styles.rechazarMotivoRadioSelected]}>
-                      {selected && <View style={styles.rechazarMotivoRadioDot} />}
-                    </View>
-                    <Text style={[styles.rechazarMotivoText, selected && styles.rechazarMotivoTextSelected]}>{motivo}</Text>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <View style={styles.rechazarMotivoList}>
+              {isLoadingMotivos ? (
+                <ActivityIndicator color="#926FA9" style={{ marginVertical: 12 }} />
+              ) : (
+                motivosRechazo.map(motivo => {
+                  const selected = rechazarModal.selectedMotivo === motivo;
+                  return (
+                    <Pressable
+                      key={motivo}
+                      style={[styles.rechazarMotivoItem, selected && styles.rechazarMotivoItemSelected]}
+                      onPress={() => setRechazarModal(v => ({ ...v, selectedMotivo: motivo }))}
+                    >
+                      <View style={[styles.rechazarMotivoRadio, selected && styles.rechazarMotivoRadioSelected]}>
+                        {selected && <View style={styles.rechazarMotivoRadioDot} />}
+                      </View>
+                      <Text style={[styles.rechazarMotivoText, selected && styles.rechazarMotivoTextSelected]}>{motivo}</Text>
+                    </Pressable>
+                  );
+                })
+              )}
+            </View>
             <View style={styles.modalButtons}>
               <Pressable
                 style={styles.modalCancelButton}
@@ -1432,7 +1461,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   rechazarMotivoList: {
-    maxHeight: 220,
+    gap: 6,
     marginBottom: 16,
   },
   rechazarMotivoItem: {
