@@ -75,7 +75,8 @@
             "backgroundColor": "#673E8A"
           }
         }
-      ]
+      ],
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -87,6 +88,6 @@
         "projectId": "fb941144-6082-4e3b-9fbf-7b3aeaa7149a"
       }
     },
-    "owner": "rjuarezs-organization",
+    "owner": "rjuarezs-organization"
   }
 }

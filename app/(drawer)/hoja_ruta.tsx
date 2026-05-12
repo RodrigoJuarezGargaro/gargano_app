@@ -8,7 +8,8 @@ import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import MapView, { Marker, Polyline } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
@@ -36,6 +37,11 @@ export default function HojaRutaScreen() {
 
   const [motivosRechazo, setMotivosRechazo] = useState<string[]>([]);
   const [isLoadingMotivos, setIsLoadingMotivos] = useState(false);
+
+  const [mapaModal, setMapaModal] = useState<{
+    visible: boolean;
+    puntos: { latitude: number; longitude: number; label: string }[];
+  }>({ visible: false, puntos: [] });
 
   const [rechazarModal, setRechazarModal] = useState<{
     visible: boolean;
@@ -75,6 +81,7 @@ export default function HojaRutaScreen() {
       }
 
       const rol = String(sessionData.perfil_nombre || sessionData.rol || '').trim().toLowerCase();
+      console.log('User role:', rol);
       setUserRol(rol);
       await fetchHojaRuta(displayName, rol);
     };
@@ -89,7 +96,7 @@ export default function HojaRutaScreen() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), API_RESPONSE_TIMEOUT_MS);
       try {
-        if (rol === 'analista') {
+        if (rol === 'analista' || rol === 'admin' || rol === 'trafico') {
           response = await fetch(
             'https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_hoja_ruta_diaria',
             { method: 'GET', signal: controller.signal }
@@ -607,6 +614,35 @@ export default function HojaRutaScreen() {
     }
   };
 
+  const handleVerRecorrido = (detalles: Record<string, unknown>[]) => {
+    const parseCoordenadas = (raw: unknown): { latitude: number; longitude: number } | null => {
+      const str = String(raw || '').trim();
+      if (!str) return null;
+      const latMatch = str.match(/"latitude"\s*:\s*(-?\d+(?:\.\d+)?)/);
+      const lonMatch = str.match(/"longitude"\s*:\s*(-?\d+(?:\.\d+)?)/);
+      if (latMatch && lonMatch) {
+        return { latitude: parseFloat(latMatch[1]), longitude: parseFloat(lonMatch[1]) };
+      }
+      return null;
+    };
+
+    const puntos = detalles
+      .map(det => {
+        const coords = parseCoordenadas(det.coordenadas);
+        if (!coords) return null;
+        const label = String(det.cliente || det.direccion || '').trim();
+        return { ...coords, label };
+      })
+      .filter(Boolean) as { latitude: number; longitude: number; label: string }[];
+
+    if (puntos.length === 0) {
+      Alert.alert('Sin coordenadas', 'No hay coordenadas GPS registradas para este recorrido.');
+      return;
+    }
+
+    setMapaModal({ visible: true, puntos });
+  };
+
   const handlePartialDelivery = (
     hruta_d: string,
     cliente: string,
@@ -754,7 +790,15 @@ export default function HojaRutaScreen() {
                       style={styles.routeCardChevron}
                     />
                   </Pressable>
-
+                  {(todosConfirmados && (userRol === 'admin' || userRol === 'trafico')) && (
+                    <Pressable
+                      style={styles.verRecorridoButton}
+                      onPress={() => handleVerRecorrido(detalles)}
+                    >
+                      <Ionicons name="map-outline" size={14} color="#A0C4FF" />
+                      <Text style={styles.verRecorridoText}>Ver recorrido completo</Text>
+                    </Pressable>
+                  )}
                   {detalles.length > 0 && expandedCards.has(index) && (
                     <View style={styles.detallesBlock}>
                       {detalles.map((det, dIndex) => {
@@ -898,6 +942,54 @@ export default function HojaRutaScreen() {
           )}
         </View>
       </ScrollView>
+
+      <Modal
+        transparent={false}
+        visible={mapaModal.visible}
+        animationType="slide"
+        onRequestClose={() => setMapaModal(v => ({ ...v, visible: false }))}
+      >
+        <View style={styles.mapaModalContainer}>
+          <View style={styles.mapaModalHeader}>
+            <Text style={styles.mapaModalTitle}>Recorrido de entrega</Text>
+            <Pressable
+              onPress={() => setMapaModal(v => ({ ...v, visible: false }))}
+              style={styles.mapaModalCloseButton}
+            >
+              <Ionicons name="close" size={22} color="#DCE2F1" />
+            </Pressable>
+          </View>
+          {mapaModal.puntos.length > 0 && (
+            <MapView
+              style={styles.mapaView}
+              initialRegion={{
+                latitude: mapaModal.puntos[Math.floor(mapaModal.puntos.length / 2)].latitude,
+                longitude: mapaModal.puntos[Math.floor(mapaModal.puntos.length / 2)].longitude,
+                latitudeDelta: 0.08,
+                longitudeDelta: 0.08,
+              }}
+              showsUserLocation
+              showsMyLocationButton
+            >
+              {mapaModal.puntos.map((p, i) => (
+                <Marker
+                  key={`marker-${i}`}
+                  coordinate={{ latitude: p.latitude, longitude: p.longitude }}
+                  title={`${i + 1}. ${p.label}`}
+                  pinColor={i === 0 ? '#4BB543' : i === mapaModal.puntos.length - 1 ? '#E25B5B' : '#4A90E2'}
+                />
+              ))}
+              {mapaModal.puntos.length > 1 && (
+                <Polyline
+                  coordinates={mapaModal.puntos.map(p => ({ latitude: p.latitude, longitude: p.longitude }))}
+                  strokeColor="#4A90E2"
+                  strokeWidth={3}
+                />
+              )}
+            </MapView>
+          )}
+        </View>
+      </Modal>
 
       <Modal
         transparent
@@ -1546,5 +1638,53 @@ const styles = StyleSheet.create({
   },
   rejectModalConfirmTextDisabled: {
     color: '#7A5A5A',
+  },
+  verRecorridoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    backgroundColor: '#0D1E36',
+    borderTopWidth: 1,
+    borderTopColor: '#1A3050',
+  },
+  verRecorridoText: {
+    color: '#A0C4FF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  mapaModalContainer: {
+    flex: 1,
+    backgroundColor: '#06080D',
+  },
+  mapaModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingTop: 52,
+    paddingBottom: 12,
+    backgroundColor: '#151B29',
+    borderBottomWidth: 1,
+    borderBottomColor: '#44506A',
+  },
+  mapaModalTitle: {
+    color: '#E8ECF7',
+    fontSize: 17,
+    fontWeight: '700',
+  },
+  mapaModalCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: '#232E44',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapaView: {
+    flex: 1,
+    width: Dimensions.get('window').width,
   },
 });
