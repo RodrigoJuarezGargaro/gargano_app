@@ -2,7 +2,7 @@
   "expo": {
     "name": "Gargano Logistica",
     "slug": "gargano-logistica",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "garganomobile",
@@ -76,7 +76,8 @@
           }
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,

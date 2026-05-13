@@ -2,6 +2,7 @@ import { useLocation } from '@/hooks/use-location';
 import { clearUserSession } from '@/services/session-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
@@ -58,6 +59,9 @@ export default function HojaRutaScreen() {
     } | null;
   }>({ visible: false, selectedMotivo: null, params: null });
 
+  const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
 
   useEffect(() => {
     const loadSession = async () => {
@@ -89,14 +93,21 @@ export default function HojaRutaScreen() {
     loadSession();
   }, [router]);
 
-  const fetchHojaRuta = async (nombre: string, rol: string) => {
+  const fetchHojaRuta = async (nombre: string, rol: string, fecha?: Date) => {
     setIsLoadingRoutes(true);
     try {
       let response: Response;
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), API_RESPONSE_TIMEOUT_MS);
       try {
-        if (rol === 'analista' || rol === 'admin' || rol === 'trafico') {
+        if (rol === 'analista') {
+          const dateToUse = fecha || new Date();
+          const formattedDate = dateToUse.toISOString().split('T')[0]; // YYYY-MM-DD
+          response = await fetch(
+            `https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_hoja_ruta_por_fecha/${formattedDate}`,
+            { method: 'GET', signal: controller.signal }
+          );
+        } else if (rol === 'admin' || rol === 'trafico') {
           response = await fetch(
             'https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_hoja_ruta_diaria',
             { method: 'GET', signal: controller.signal }
@@ -723,6 +734,39 @@ export default function HojaRutaScreen() {
         <View style={styles.greetingBlock}>
           <Text style={styles.greetingTitle}>Hola, {name}</Text>
         </View>
+
+        {userRol === 'analista' && (
+          <View style={styles.datePickerBlock}>
+            <Text style={styles.datePickerLabel}>Seleccionar fecha:</Text>
+            <Pressable
+              style={styles.datePickerButton}
+              onPress={() => setShowDatePicker(true)}
+            >
+              <Ionicons name="calendar-outline" size={18} color="#A0C4FF" />
+              <Text style={styles.datePickerButtonText}>
+                {selectedDate.toLocaleDateString('es-AR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                })}
+              </Text>
+            </Pressable>
+            {showDatePicker && (
+              <DateTimePicker
+                value={selectedDate}
+                mode="date"
+                display="default"
+                onChange={(event, date) => {
+                  setShowDatePicker(false);
+                  if (date) {
+                    setSelectedDate(date);
+                    fetchHojaRuta(userName, userRol, date);
+                  }
+                }}
+              />
+            )}
+          </View>
+        )}
 
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>
@@ -1686,5 +1730,36 @@ const styles = StyleSheet.create({
   mapaView: {
     flex: 1,
     width: Dimensions.get('window').width,
+  },
+  datePickerBlock: {
+    marginBottom: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#151B29',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#44506A',
+  },
+  datePickerLabel: {
+    color: '#B0BAD0',
+    fontSize: 13,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  datePickerButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: '#1A2540',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3A5080',
+  },
+  datePickerButtonText: {
+    color: '#E8ECF7',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });
