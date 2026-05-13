@@ -85,7 +85,6 @@ export default function HojaRutaScreen() {
       }
 
       const rol = String(sessionData.perfil_nombre || sessionData.rol || '').trim().toLowerCase();
-      console.log('User role:', rol);
       setUserRol(rol);
       await fetchHojaRuta(displayName, rol);
     };
@@ -150,10 +149,7 @@ export default function HojaRutaScreen() {
   };
 
   const formateoFecha = (fecha: string) => {
-    const date = new Date(fecha);
-    const dia = String(date.getDate()).padStart(2, '0');
-    const mes = String(date.getMonth() + 1).padStart(2, '0');
-    const anio = date.getFullYear();
+    const [anio, mes, dia] = fecha.split('T')[0].split('-');
     return `${dia}/${mes}/${anio}`;
   };
 
