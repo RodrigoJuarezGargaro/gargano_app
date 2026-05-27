@@ -11,6 +11,7 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
   const router = useRouter();
   const [userName, setUserName] = useState('Usuario');
   const [userMail, setUserMail] = useState('');
+  const [userRol, setUserRol] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -19,6 +20,9 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
       const data = JSON.parse(session);
       if (data.nombre_usuario) setUserName(data.nombre_usuario);
       else if (data.login) setUserName(data.login);
+      
+      const rol = String(data.perfil_nombre || data.rol || '').trim().toLowerCase();
+      setUserRol(rol);
     };
     load();
   }, []);
@@ -55,6 +59,17 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
           <Ionicons name="map-outline" size={20} color="#926FA9" />
           <Text style={styles.navItemText}>Hoja de Ruta</Text>
         </Pressable>
+        
+        {/* Solo para Admin y Tráfico */}
+        {(userRol === 'admin' || userRol === 'trafico') && (
+          <Pressable
+            style={({ pressed }) => [styles.navItem, pressed && styles.navItemPressed]}
+            onPress={() => navigation.navigate('ubicacion_tiempo_real')}
+          >
+            <Ionicons name="location-outline" size={20} color="#6A8AAC" />
+            <Text style={styles.navItemText}>Ubicación en Tiempo Real</Text>
+          </Pressable>
+        )}
       </View>
 
       {/* Cerrar sesión */}

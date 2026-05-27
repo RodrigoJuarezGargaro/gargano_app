@@ -22,6 +22,12 @@ export default function DrawerLayout() {
             drawerLabel: 'Hoja de Ruta',
           }}
         />
+        <Drawer.Screen
+          name="ubicacion_tiempo_real"
+          options={{
+            drawerLabel: 'Ubicación en Tiempo Real',
+          }}
+        />
       </Drawer>
     </GestureHandlerRootView>
   );

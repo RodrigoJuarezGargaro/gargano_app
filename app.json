@@ -7,7 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "garganomobile",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.rjuarezsorganization.garganologistica",
@@ -15,22 +14,26 @@
         "googleMapsApiKey": "TU_API_KEY_IOS_ACÁ"
       },
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["location", "fetch"]
       }
     },
     "android": {
+       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#673E8A",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.rjuarezsorganization.garganologistica",
       "permissions": [
         "ACCESS_FINE_LOCATION",
-        "ACCESS_COARSE_LOCATION"
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION"
       ],
       "config": {
         "googleMaps": {
@@ -49,6 +52,7 @@
     },
     "plugins": [
       "expo-router",
+      "expo-notifications",
       [
         "expo-image-picker",
         {
@@ -59,9 +63,11 @@
       [
         "expo-location",
         {
-          "locationAlwaysAndWhenInUsePermission": "La app usa tu ubicación para registrar la posición de las entregas.",
+          "locationAlwaysAndWhenInUsePermission": "La app usa tu ubicación para registrar la posición de las entregas y rastrear el recorrido del chofer.",
           "locationWhenInUsePermission": "La app usa tu ubicación para registrar la posición de las entregas.",
-          "isIosBackgroundLocationEnabled": false
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
         }
       ],
       [
@@ -77,7 +83,8 @@
         }
       ],
       "expo-web-browser",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      "./plugins/withAndroidBackgroundLocation.js"
     ],
     "experiments": {
       "typedRoutes": true,

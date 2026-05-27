@@ -33,6 +33,7 @@ export default function HomeScreen() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   useEffect(() => {
+    console.log('Verificando sesion de usuario...');
     const checkSession = async () => {
       const session = await getUserSession();
       if (session) {
