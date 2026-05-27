@@ -17,10 +17,18 @@
       },
       "android": {
         "buildType": "apk"
-      }
+      },
+      "env": {
+        "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON"
+      },
+      "prebuildCommand": "bash scripts/eas-build-pre-install.sh"
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON"
+      },
+      "prebuildCommand": "bash scripts/eas-build-pre-install.sh"
     }
   }
 }
