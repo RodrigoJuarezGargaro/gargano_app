@@ -2,7 +2,13 @@
 
 set -euo pipefail
 
-echo "▸ Copying google-services.json from EAS Secret..."
+# Only run in EAS build environment
+if [ -z "${EAS_BUILD_WORKDIR:-}" ]; then
+  echo "ℹ Not in EAS build environment, skipping Firebase config setup..."
+  exit 0
+fi
+
+echo "▸ Running EAS pre-install script..."
 
 if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
   echo "▸ GOOGLE_SERVICES_JSON found, copying to project root..."
@@ -20,3 +26,5 @@ if [ -n "${FIREBASE_ADMIN_SDK_JSON:-}" ]; then
 else
   echo "ℹ FIREBASE_ADMIN_SDK_JSON not found (optional)"
 fi
+
+echo "✓ EAS pre-install script completed successfully"

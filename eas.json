@@ -21,16 +21,14 @@
       "env": {
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON",
         "FIREBASE_ADMIN_SDK_JSON": "@FIREBASE_ADMIN_SDK_JSON"
-      },
-      "prebuildCommand": "bash scripts/eas-build-pre-install.sh"
+      }
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "GOOGLE_SERVICES_JSON": "@GOOGLE_SERVICES_JSON",
         "FIREBASE_ADMIN_SDK_JSON": "@FIREBASE_ADMIN_SDK_JSON"
-      },
-      "prebuildCommand": "bash scripts/eas-build-pre-install.sh"
+      }
     }
   }
 }

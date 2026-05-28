@@ -33,7 +33,6 @@ export default function HojaRutaScreen() {
       setNotificationsEnabled(status === 'granted');
     } catch (error) {
       console.log('Error al verificar permisos de notificaciones:', error);
-      // En Expo Go SDK 53+ esto puede fallar, mostramos como deshabilitado
       setNotificationsEnabled(false);
     } finally {
       setIsCheckingPermissions(false);
