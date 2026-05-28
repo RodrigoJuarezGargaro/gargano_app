@@ -36,6 +36,7 @@ yarn-error.*
 # Firebase credentials
 garganomobile-firebase-adminsdk-fbsvc-4846acb8bf.json
 google-services.json
+app.json.old
 
 # typescript
 *.tsbuildinfo
