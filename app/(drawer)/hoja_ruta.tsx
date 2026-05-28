@@ -1,6 +1,7 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
+import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -40,24 +41,93 @@ export default function HojaRutaScreen() {
   };
 
   const handleEnableNotifications = async () => {
-    Alert.alert(
-      'Notificaciones Push',
-      'Las notificaciones push requieren un development build. Expo Go ya no soporta notificaciones push desde SDK 53.\n\nPara habilitarlas, necesitas crear un build de desarrollo con:\n\nnpx expo prebuild\nnpx expo run:android',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Más información',
-          onPress: () => {
-            Toast.show({
-              type: 'info',
-              text1: 'Documentación',
-              text2: 'Visita docs.expo.dev para más información',
-              position: 'bottom',
-            });
-          },
-        },
-      ]
-    );
+    try {
+      // 1. Validar que sea un dispositivo físico
+      if (!Device.isDevice) {
+        Alert.alert(
+          'Notificaciones Push',
+          'Las notificaciones push solo funcionan en dispositivos físicos, no en emuladores.',
+          [{ text: 'Entendido' }]
+        );
+        return;
+      }
+
+      // 2. Solicitar permisos
+      const { status: existingStatus } = await Notifications.getPermissionsAsync();
+      let finalStatus = existingStatus;
+      
+      if (existingStatus !== 'granted') {
+        const { status } = await Notifications.requestPermissionsAsync();
+        finalStatus = status;
+      }
+      
+      if (finalStatus !== 'granted') {
+        Alert.alert(
+          'Permisos Denegados',
+          'No se otorgaron permisos para las notificaciones push. Por favor, habilítalos en la configuración de tu dispositivo.',
+          [{ text: 'Entendido' }]
+        );
+        return;
+      }
+
+      // 3. Obtener el token de notificaciones
+      try {
+        // Intenta obtener el token nativo (para producción)
+        const tokenData = await Notifications.getDevicePushTokenAsync();
+        console.log('Token de notificaciones obtenido:', tokenData.data);
+        
+        setNotificationsEnabled(true);
+        
+        Toast.show({
+          type: 'success',
+          text1: '¡Notificaciones Activadas!',
+          text2: 'Recibirás alertas sobre tus hojas de ruta',
+          position: 'bottom',
+        });
+
+        // Aquí puedes enviar el token a tu backend si lo necesitas
+        // await sendTokenToBackend(tokenData.data);
+        
+      } catch (tokenError) {
+        console.error('Error obteniendo token de notificaciones:', tokenError);
+        
+        // Solo en desarrollo, mostrar el mensaje sobre development builds
+        if (__DEV__) {
+          Alert.alert(
+            'Notificaciones Push',
+            'Las notificaciones push requieren un development build. Expo Go ya no soporta notificaciones push desde SDK 53.\n\nPara habilitarlas en desarrollo, crea un build con:\n\nnpx expo prebuild\nnpx expo run:android',
+            [
+              { text: 'Cancelar', style: 'cancel' },
+              {
+                text: 'Más información',
+                onPress: () => {
+                  Toast.show({
+                    type: 'info',
+                    text1: 'Documentación',
+                    text2: 'Visita docs.expo.dev para más información',
+                    position: 'bottom',
+                  });
+                },
+              },
+            ]
+          );
+        } else {
+          // En producción, mostrar un error genérico
+          Alert.alert(
+            'Error',
+            'No se pudo activar las notificaciones. Por favor, intenta nuevamente más tarde.',
+            [{ text: 'Entendido' }]
+          );
+        }
+      }
+    } catch (error) {
+      console.error('Error general en notificaciones:', error);
+      Alert.alert(
+        'Error',
+        'Ocurrió un error al configurar las notificaciones. Por favor, intenta nuevamente.',
+        [{ text: 'Entendido' }]
+      );
+    }
   };
 
   const handleLogout = async () => {
