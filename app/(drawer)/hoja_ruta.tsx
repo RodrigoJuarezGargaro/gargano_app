@@ -79,11 +79,13 @@ export default function HojaRutaScreen() {
         return;
       }
 
-      // 3. Obtener el token de notificaciones
+      // 3. Obtener el token de notificaciones de Expo
       try {
-        // Intenta obtener el token nativo (para producción)
-        const tokenData = await Notifications.getDevicePushTokenAsync();
-        console.log('Token de notificaciones obtenido:', tokenData.data);
+        // Obtener el Expo Push Token (formato: ExponentPushToken[XXXXXX])
+        const expoPushToken = await Notifications.getExpoPushTokenAsync({
+          projectId: 'fb941144-6082-4e3b-9fbf-7b3aeaa7149a',
+        });
+        console.log('Expo Push Token obtenido:', expoPushToken.data);
         
         // Guardar el token en el backend
         try {
@@ -99,10 +101,10 @@ export default function HojaRutaScreen() {
             return;
           }
 
-          Alert.alert(//Poner el body del token en un alert para verificar que se obtiene correctamente
+          Alert.alert(
             'Token de Notificaciones',
             'Usuario: ' + usuario + '\n\n' +
-            `Token obtenido: ${tokenData.data}`,
+            `Token obtenido: ${expoPushToken.data}`,
             [{ text: 'Entendido' }]
           );
 
@@ -113,7 +115,7 @@ export default function HojaRutaScreen() {
             },
             body: JSON.stringify({
               usuario: usuario,
-              token_notificacion: tokenData.data,
+              token_notificacion: expoPushToken.data,
             }),
           });
 
