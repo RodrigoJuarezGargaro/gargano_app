@@ -6,7 +6,7 @@ import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Alert, AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
@@ -24,46 +24,25 @@ export default function HojaRutaScreen() {
       const nombre = await AsyncStorage.getItem('nombre_usuario');
       if (nombre) {
         setNombreUsuario(nombre);
+        // Verificar si tiene notificaciones activadas
+        checkNotificationsInBackend(nombre);
+      } else {
+        setIsCheckingPermissions(false);
       }
     };
     loadUserData();
-    checkNotificationPermissions();
-
-    // Listener para detectar cuando la app vuelve al foreground
-    // Esto permite detectar si el usuario desactivó los permisos manualmente
-    const subscription = AppState.addEventListener('change', (nextAppState) => {
-      if (nextAppState === 'active') {
-        // La app volvió al foreground, verificar permisos nuevamente
-        checkNotificationPermissions();
-      }
-    });
-
-    // Cleanup: remover el listener cuando el componente se desmonte
-    return () => {
-      subscription.remove();
-    };
   }, []);
 
-  const checkNotificationPermissions = async () => {
+  const checkNotificationsInBackend = async (usuario: string) => {
     try {
-      const { status } = await Notifications.getPermissionsAsync();
-      const wasEnabled = notificationsEnabled;
-      const isNowEnabled = status === 'granted';
-      
-      setNotificationsEnabled(isNowEnabled);
-      
-      // Si estaban activadas y ahora están desactivadas, notificar al usuario
-      if (wasEnabled && !isNowEnabled && !isCheckingPermissions) {
-        Toast.show({
-          type: 'error',
-          text1: 'Notificaciones Desactivadas',
-          text2: 'Los permisos de notificación fueron revocados',
-          position: 'bottom',
-          visibilityTime: 4000,
-        });
-      }
+      const response = await fetch(
+        `${API_BASE_URL}verificar_token_notificacion&usuario=${usuario}`,
+        { method: 'GET' }
+      );
+      const result = await response.json();
+      setNotificationsEnabled(result.success && result.tiene_token);
     } catch (error) {
-      console.log('Error al verificar permisos de notificaciones:', error);
+      console.error('Error verificando notificaciones:', error);
       setNotificationsEnabled(false);
     } finally {
       setIsCheckingPermissions(false);
@@ -120,6 +99,13 @@ export default function HojaRutaScreen() {
             return;
           }
 
+          Alert.alert(//Poner el body del token en un alert para verificar que se obtiene correctamente
+            'Token de Notificaciones',
+            'Usuario: ' + usuario + '\n\n' +
+            `Token obtenido: ${tokenData.data}`,
+            [{ text: 'Entendido' }]
+          );
+
           const response = await fetch(API_BASE_URL + 'guardar_token_notificacion', {
             method: 'POST',
             headers: {
@@ -134,13 +120,32 @@ export default function HojaRutaScreen() {
           const result = await response.json();
 
           if (!response.ok || !result.success) {
+            Toast.show({
+              type: 'error',
+              text1: 'Error al Guardar Token',
+              text2: 'No se pudo guardar el token en el backend. Las notificaciones podrían no funcionar correctamente.',
+              position: 'bottom',
+            });
             console.error('Error al guardar token en backend:', result);
             throw new Error(result.message || 'Error al guardar el token');
           }
 
+          Toast.show({
+            type: 'success',
+            text1: 'Token Guardado',
+            text2: 'El token de notificaciones se guardó correctamente en el backend.',
+            position: 'bottom',
+          });
+
           console.log('Token guardado exitosamente en el backend:', result);
         } catch (backendError) {
           console.error('Error al guardar el token en el backend:', backendError);
+          Toast.show({
+            type: 'error',
+            text1: 'Error al Guardar Token',
+            text2: 'No se pudo guardar el token en el backend. Las notificaciones podrían no funcionar correctamente.',
+            position: 'bottom',
+          });
           // No bloqueamos la activación de notificaciones por un error en el backend
         }
         

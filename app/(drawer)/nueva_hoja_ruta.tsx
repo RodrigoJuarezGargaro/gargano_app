@@ -71,6 +71,7 @@ export default function NuevaHojaRutaScreen() {
     cliente: string;
     remito: string;
   }>({ visible: false, mensaje: '', chofer: '', cliente: '', remito: '' });
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
 
 
   useEffect(() => {
@@ -96,6 +97,26 @@ export default function NuevaHojaRutaScreen() {
 
       const rol = String(sessionData.perfil_nombre || sessionData.rol || '').trim().toLowerCase();
       setUserRol(rol);
+      
+      // Verificar si las notificaciones están activadas
+      const checkNotifications = async () => {
+        try {
+          const usuario = sessionData.nombre_usuario || sessionData.login;
+          if (!usuario) return;
+          
+          const response = await fetch(
+            `https://gargano-proxy.vercel.app/api/proxy?endpoint=verificar_token_notificacion&usuario=${usuario}`,
+            { method: 'GET' }
+          );
+          const result = await response.json();
+          setNotificationsEnabled(result.success && result.tiene_token);
+        } catch (error) {
+          console.error('Error verificando notificaciones:', error);
+          setNotificationsEnabled(false);
+        }
+      };
+      
+      checkNotifications();
       await fetchHojaRuta(displayName, rol);
     };
 
@@ -103,6 +124,8 @@ export default function NuevaHojaRutaScreen() {
   }, [router]);
 
   // Efecto para gestionar el tracking de ubicación en segundo plano
+  // COMENTADO PARA EVITAR CRASHES EN DESARROLLO LOCAL
+  /* 
   useEffect(() => {
     const manageTracking = async () => {
       // MODO TESTING: Se comenta la validación de rol para permitir tracking a todos
@@ -135,7 +158,7 @@ export default function NuevaHojaRutaScreen() {
         }
       // }
 
-      /* MODO PRODUCCIÓN (comentado para testing):
+      // MODO PRODUCCIÓN (comentado para testing):
       // Verificar si hay rutas pendientes (no confirmadas)
       const hayRutasPendientes = hojaRuta.some(ruta => {
         const rutaObj = typeof ruta === 'object' && ruta !== null ? (ruta as Record<string, unknown>) : {};
@@ -170,11 +193,11 @@ export default function NuevaHojaRutaScreen() {
           position: 'bottom',
         });
       }
-      */
     };
 
     manageTracking();
   }, [userRol, hojaRuta, isTrackingActive, startTracking, stopTracking]);
+  */
 
   const fetchHojaRuta = async (nombre: string, rol: string, fecha?: Date) => {
     setIsLoadingRoutes(true);
@@ -905,8 +928,9 @@ export default function NuevaHojaRutaScreen() {
           <Text style={styles.greetingTitle}>Hola, {name}</Text>
         </View>
 
+        {/* COMENTADO PARA EVITAR CRASHES EN DESARROLLO LOCAL */}
         {/* MODO TESTING: Mostrar indicador de tracking para todos los roles */}
-        {true && (
+        {/* {true && (
           <View style={styles.trackingIndicator}>
             <View style={styles.trackingIndicatorHeader}>
               <View style={styles.trackingIndicatorLeft}>
@@ -968,6 +992,7 @@ export default function NuevaHojaRutaScreen() {
             )}
           </View>
         )}
+        */}
         {/* MODO PRODUCCIÓN: Cambiar {true && ( por {userRol === 'chofer' && ( */}
 
         {userRol === 'analista' && (
@@ -1194,12 +1219,12 @@ export default function NuevaHojaRutaScreen() {
                                     <Ionicons name="git-branch-outline" size={13} color="#F2E8FF" />
                                     <Text style={styles.partialButtonText}>Parcial</Text>
                                   </Pressable>
-                                  {/* Botón Consultar al chofer - Solo para admin, tráfico, analistas */}
-                                  {(userRol === 'admin' || userRol === 'trafico' || userRol === 'analista') && (
+                                  {/* Botón Consultar al chofer - Solo para admin, tráfico, analistas con notificaciones activas */}
+                                  {(userRol === 'admin' || userRol === 'trafico' || userRol === 'analista') && notificationsEnabled && (
                                     <Pressable
                                       onPress={() => handleConsultarChofer(chofer, cliente, letra, sucur, numero)}
                                       style={styles.consultarButton}>
-                                      <Ionicons name="chatbubble-ellipses-outline" size={13} color="#E8F5E9" />
+                                      <Ionicons name="chatbubble-ellipses-outline" size={13} color="#DCE2F1" />
                                       <Text style={styles.consultarButtonText}>Consultar</Text>
                                     </Pressable>
                                   )}
@@ -1811,12 +1836,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     height: 30,
     borderRadius: 6,
-    backgroundColor: '#1B3A2E',
+    backgroundColor: '#2A3550',
     borderWidth: 1,
-    borderColor: '#2E5F4A',
+    borderColor: '#4A5A80',
   },
   consultarButtonText: {
-    color: '#A0E6C0',
+    color: '#A5B4D4',
     fontSize: 11,
     fontWeight: '700',
   },

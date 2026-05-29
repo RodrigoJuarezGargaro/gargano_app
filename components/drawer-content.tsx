@@ -56,6 +56,14 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
           style={({ pressed }) => [styles.navItem, pressed && styles.navItemPressed]}
           onPress={() => navigation.navigate('hoja_ruta')}
         >
+          <Ionicons name="menu-outline" size={20} color="#926FA9" />
+          <Text style={styles.navItemText}>Menú</Text>
+        </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [styles.navItem, pressed && styles.navItemPressed]}
+          onPress={() => navigation.navigate('nueva_hoja_ruta')}
+        >
           <Ionicons name="map-outline" size={20} color="#926FA9" />
           <Text style={styles.navItemText}>Hoja de Ruta</Text>
         </Pressable>
