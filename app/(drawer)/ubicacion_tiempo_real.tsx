@@ -5,13 +5,13 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -54,8 +54,8 @@ export default function UbicacionTiempoRealScreen() {
       const rol = String(sessionData.perfil_nombre || sessionData.rol || '').trim().toLowerCase();
       setUserRol(rol);
 
-      // Solo admins y tráfico pueden ver esta pantalla
-      if (rol !== 'admin' && rol !== 'trafico') {
+      // Solo admins pueden ver esta pantalla
+      if (rol !== 'admin') {
         Toast.show({
           type: 'error',
           text1: 'Acceso denegado',
@@ -71,9 +71,9 @@ export default function UbicacionTiempoRealScreen() {
     loadSession();
   }, [router]);
 
-  // Auto-refresh cada 30 segundos
+  // Auto-refresh cada 30 segundos (solo para admin)
   useEffect(() => {
-    if (userRol === 'admin' || userRol === 'trafico') {
+    if (userRol === 'admin') {
       const interval = setInterval(() => {
         fetchUbicaciones(true); // Silent refresh
       }, AUTO_REFRESH_INTERVAL);
@@ -346,28 +346,31 @@ export default function UbicacionTiempoRealScreen() {
                       { backgroundColor: getMarkerColor(ubicacion.tiempo_transcurrido) }
                     ]} />
                   </View>
-                  <View style={styles.choferDetails}>
-                    <View style={styles.detailRow}>
-                      <Ionicons name="location-outline" size={14} color="#6A8AAC" />
-                      <Text style={styles.detailText}>
-                        {ubicacion.latitude.toFixed(6)}, {ubicacion.longitude.toFixed(6)}
-                      </Text>
-                    </View>
-                    <View style={styles.detailRow}>
-                      <Ionicons name="radio-outline" size={14} color="#6A8AAC" />
-                      <Text style={styles.detailText}>
-                        Precisión: {ubicacion.accuracy.toFixed(0)}m
-                      </Text>
-                    </View>
-                    {ubicacion.speed !== null && ubicacion.speed > 0 && (
+                  {/* Detalles técnicos: Solo para Admin */}
+                  {userRol === 'admin' && (
+                    <View style={styles.choferDetails}>
                       <View style={styles.detailRow}>
-                        <Ionicons name="speedometer-outline" size={14} color="#6A8AAC" />
+                        <Ionicons name="location-outline" size={14} color="#6A8AAC" />
                         <Text style={styles.detailText}>
-                          {(ubicacion.speed * 3.6).toFixed(0)} km/h
+                          {ubicacion.latitude.toFixed(6)}, {ubicacion.longitude.toFixed(6)}
                         </Text>
                       </View>
-                    )}
-                  </View>
+                      <View style={styles.detailRow}>
+                        <Ionicons name="radio-outline" size={14} color="#6A8AAC" />
+                        <Text style={styles.detailText}>
+                          Precisión: {ubicacion.accuracy.toFixed(0)}m
+                        </Text>
+                      </View>
+                      {ubicacion.speed !== null && ubicacion.speed > 0 && (
+                        <View style={styles.detailRow}>
+                          <Ionicons name="speedometer-outline" size={14} color="#6A8AAC" />
+                          <Text style={styles.detailText}>
+                            {(ubicacion.speed * 3.6).toFixed(0)} km/h
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
                 </View>
               ))
             )}

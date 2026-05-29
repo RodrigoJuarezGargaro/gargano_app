@@ -10,7 +10,7 @@ import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -64,6 +64,14 @@ export default function NuevaHojaRutaScreen() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
 
+  const [consultarModal, setConsultarModal] = useState<{
+    visible: boolean;
+    mensaje: string;
+    chofer: string;
+    cliente: string;
+    remito: string;
+  }>({ visible: false, mensaje: '', chofer: '', cliente: '', remito: '' });
+
 
   useEffect(() => {
     const loadSession = async () => {
@@ -113,6 +121,7 @@ export default function NuevaHojaRutaScreen() {
         console.log('[HojaRuta] MODO TESTING: Iniciando tracking automáticamente');
         const success = await startTracking();
         if (success) {
+          console.log('[HojaRuta] ✅ Tracking activado exitosamente');
           Toast.show({
             type: 'info',
             text1: 'Seguimiento de ubicación activado',
@@ -120,12 +129,9 @@ export default function NuevaHojaRutaScreen() {
             position: 'bottom',
           });
         } else {
-          Toast.show({
-            type: 'error',
-            text1: 'No se pudo activar el seguimiento',
-            text2: 'Verifica los permisos de ubicación',
-            position: 'bottom',
-          });
+          // Si falla (permisos denegados), solo registrar en consola sin molestar al usuario
+          console.log('[HojaRuta] ⚠️ No se pudo activar el tracking (permisos no otorgados o error)');
+          // NO mostrar Toast de error para no molestar al usuario
         }
       // }
 
@@ -149,12 +155,9 @@ export default function NuevaHojaRutaScreen() {
             position: 'bottom',
           });
         } else {
-          Toast.show({
-            type: 'error',
-            text1: 'No se pudo activar el seguimiento',
-            text2: 'Verifica los permisos de ubicación',
-            position: 'bottom',
-          });
+          // Si falla (permisos denegados), solo registrar en consola sin molestar al usuario
+          console.log('[HojaRuta] ⚠️ No se pudo activar el tracking (permisos no otorgados)');
+          // NO mostrar Toast de error para no molestar al usuario
         }
       } else if (!hayRutasPendientes && isTrackingActive) {
         // No hay rutas pendientes y el tracking está activo: detenerlo
@@ -277,15 +280,15 @@ export default function NuevaHojaRutaScreen() {
     fecha: string,
   ) => {
     Alert.alert(
-      'Confirmar entrega',
-      `¿Confirmar entrega a ${cliente}?\nHoja de ruta: ${hruta_d}`,
+      '¿Confirmar entrega?',
+      `Cliente: ${cliente}\nHoja de ruta: ${hruta_d}\n\nAl confirmar, se te pedirá tomar una foto de la entrega.`,
       [
         {
           text: 'Cancelar',
           style: 'cancel',
         },
         {
-          text: 'Confirmar',
+          text: 'Confirmar y tomar foto',
           onPress: async () => {
             try {
               // 1. Verificar si el remito existe
@@ -394,8 +397,14 @@ export default function NuevaHojaRutaScreen() {
 
               if (guardarFechaData?.actualizado) {
                 updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, true);
-                Toast.show({ type: 'success', text1: 'Entrega confirmada y fecha guardada correctamente.' });
+                Toast.show({ type: 'success', text1: 'Entrega confirmada correctamente.' });
                 await fetchHojaRuta(userName, userRol);
+                
+                // 5. Abrir cámara automáticamente para tomar la foto
+                // Se usa setTimeout para dar tiempo a que se cierre el Alert y se muestre el Toast
+                setTimeout(() => {
+                  handleTakePhoto(empresa, tdoc, letra, sucursal, numero);
+                }, 500);
               } else {
                 Toast.show({ type: 'error', text1: 'No se pudo guardar la fecha de entrega.' });
               }
@@ -791,6 +800,88 @@ export default function NuevaHojaRutaScreen() {
     );
   };
 
+  const handleConsultarChofer = (
+    chofer: string,
+    cliente: string,
+    letra: string,
+    sucursal: string,
+    numero: string,
+  ) => {
+    setConsultarModal({
+      visible: true,
+      mensaje: '',
+      chofer,
+      cliente,
+      remito: `${letra}-${sucursal}-${numero}`,
+    });
+  };
+
+  const enviarConsultaChofer = async () => {
+    const { chofer, mensaje, cliente, remito } = consultarModal;
+    
+    if (!mensaje.trim()) {
+      Toast.show({
+        type: 'error',
+        text1: 'Mensaje vacío',
+        text2: 'Por favor escribe una consulta',
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        'https://gargano-proxy.vercel.app/api/proxy?endpoint=enviar_notificacion_chofer',
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: JSON.stringify({
+            chofer: chofer,
+            titulo: `Consulta sobre ${cliente}`,
+            mensaje: mensaje.trim(),
+            usuario_origen: userName,
+            remito: remito,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        if (response.status === 404) {
+          Toast.show({
+            type: 'error',
+            text1: 'Notificaciones no disponibles',
+            text2: 'El chofer no tiene notificaciones activadas',
+          });
+        } else {
+          Toast.show({
+            type: 'error',
+            text1: 'Error al enviar',
+            text2: data.message || 'No se pudo enviar la notificación',
+          });
+        }
+        return;
+      }
+
+      setConsultarModal({ visible: false, mensaje: '', chofer: '', cliente: '', remito: '' });
+      Toast.show({
+        type: 'success',
+        text1: 'Notificación enviada',
+        text2: `Consulta enviada a ${chofer}`,
+      });
+    } catch (error) {
+      console.error('Error enviando consulta al chofer:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error de conexión',
+        text2: 'No se pudo conectar con el servidor',
+      });
+    }
+  };
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="light" />
@@ -1103,6 +1194,15 @@ export default function NuevaHojaRutaScreen() {
                                     <Ionicons name="git-branch-outline" size={13} color="#F2E8FF" />
                                     <Text style={styles.partialButtonText}>Parcial</Text>
                                   </Pressable>
+                                  {/* Botón Consultar al chofer - Solo para admin, tráfico, analistas */}
+                                  {(userRol === 'admin' || userRol === 'trafico' || userRol === 'analista') && (
+                                    <Pressable
+                                      onPress={() => handleConsultarChofer(chofer, cliente, letra, sucur, numero)}
+                                      style={styles.consultarButton}>
+                                      <Ionicons name="chatbubble-ellipses-outline" size={13} color="#E8F5E9" />
+                                      <Text style={styles.consultarButtonText}>Consultar</Text>
+                                    </Pressable>
+                                  )}
                                   {/* {(det.img_path || det.img_archivo) && (
                                     <Pressable
                                       style={[styles.partialButton, { marginTop: 8 }]}
@@ -1176,6 +1276,75 @@ export default function NuevaHojaRutaScreen() {
               )}
             </MapView>
           )}
+        </View>
+      </Modal>
+
+      {/* Modal para Consultar al Chofer */}
+      <Modal
+        transparent={true}
+        visible={consultarModal.visible}
+        animationType="fade"
+        onRequestClose={() => setConsultarModal(v => ({ ...v, visible: false }))}
+      >
+        <View style={styles.consultarModalOverlay}>
+          <View style={styles.consultarModalContent}>
+            <View style={styles.consultarModalHeader}>
+              <View style={styles.consultarModalTitleRow}>
+                <Ionicons name="chatbubble-ellipses" size={24} color="#4CAF50" />
+                <Text style={styles.consultarModalTitle}>Consultar al Chofer</Text>
+              </View>
+              <Pressable
+                onPress={() => setConsultarModal({ visible: false, mensaje: '', chofer: '', cliente: '', remito: '' })}
+                style={styles.consultarModalCloseButton}
+              >
+                <Ionicons name="close" size={22} color="#8A96AC" />
+              </Pressable>
+            </View>
+
+            <View style={styles.consultarModalBody}>
+              <Text style={styles.consultarModalLabel}>Chofer:</Text>
+              <Text style={styles.consultarModalValue}>{consultarModal.chofer}</Text>
+
+              <Text style={styles.consultarModalLabel}>Cliente:</Text>
+              <Text style={styles.consultarModalValue}>{consultarModal.cliente}</Text>
+
+              <Text style={styles.consultarModalLabel}>Remito:</Text>
+              <Text style={styles.consultarModalValue}>{consultarModal.remito}</Text>
+
+              <Text style={styles.consultarModalLabel}>Tu consulta:</Text>
+              <TextInput
+                style={styles.consultarModalInput}
+                placeholder="Escribe tu consulta al chofer..."
+                placeholderTextColor="#6A7A96"
+                value={consultarModal.mensaje}
+                onChangeText={(text) => setConsultarModal(v => ({ ...v, mensaje: text }))}
+                multiline
+                numberOfLines={4}
+                textAlignVertical="top"
+                maxLength={500}
+              />
+              <Text style={styles.consultarModalCharCount}>
+                {consultarModal.mensaje.length}/500 caracteres
+              </Text>
+            </View>
+
+            <View style={styles.consultarModalFooter}>
+              <Pressable
+                onPress={() => setConsultarModal({ visible: false, mensaje: '', chofer: '', cliente: '', remito: '' })}
+                style={[styles.consultarModalButton, styles.consultarModalCancelButton]}
+              >
+                <Text style={styles.consultarModalCancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                onPress={enviarConsultaChofer}
+                style={[styles.consultarModalButton, styles.consultarModalSendButton]}
+                disabled={!consultarModal.mensaje.trim()}
+              >
+                <Ionicons name="send" size={16} color="#FFF" />
+                <Text style={styles.consultarModalSendText}>Enviar</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
       </Modal>
 
@@ -1635,6 +1804,22 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  consultarButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    height: 30,
+    borderRadius: 6,
+    backgroundColor: '#1B3A2E',
+    borderWidth: 1,
+    borderColor: '#2E5F4A',
+  },
+  consultarButtonText: {
+    color: '#A0E6C0',
+    fontSize: 11,
+    fontWeight: '700',
+  },
   confirmButtonText: {
     color: '#A0E0B0',
     fontSize: 11,
@@ -1985,5 +2170,111 @@ const styles = StyleSheet.create({
   trackingLastUpdateText: {
     color: '#8A96AC',
     fontSize: 11,
+  },
+  // Estilos para Modal de Consultar al Chofer
+  consultarModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  consultarModalContent: {
+    backgroundColor: '#1E2A40',
+    borderRadius: 12,
+    width: '100%',
+    maxWidth: 500,
+    borderWidth: 1,
+    borderColor: '#2E3D56',
+  },
+  consultarModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2E3D56',
+  },
+  consultarModalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  consultarModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#E8F0FE',
+  },
+  consultarModalCloseButton: {
+    padding: 4,
+  },
+  consultarModalBody: {
+    padding: 16,
+  },
+  consultarModalLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8A96AC',
+    marginTop: 12,
+    marginBottom: 4,
+  },
+  consultarModalValue: {
+    fontSize: 15,
+    fontWeight: '500',
+    color: '#E8F0FE',
+    marginBottom: 8,
+  },
+  consultarModalInput: {
+    backgroundColor: '#0E1929',
+    borderWidth: 1,
+    borderColor: '#2E3D56',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 14,
+    color: '#E8F0FE',
+    minHeight: 100,
+    marginTop: 8,
+  },
+  consultarModalCharCount: {
+    fontSize: 11,
+    color: '#6A7A96',
+    textAlign: 'right',
+    marginTop: 4,
+  },
+  consultarModalFooter: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: '#2E3D56',
+  },
+  consultarModalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  consultarModalCancelButton: {
+    backgroundColor: '#2E3D56',
+    borderWidth: 1,
+    borderColor: '#3A4A70',
+  },
+  consultarModalCancelText: {
+    color: '#B0BAD0',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  consultarModalSendButton: {
+    backgroundColor: '#2E5F4A',
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  consultarModalSendText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

@@ -60,8 +60,8 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
           <Text style={styles.navItemText}>Hoja de Ruta</Text>
         </Pressable>
         
-        {/* Solo para Admin y Tráfico */}
-        {(userRol === 'admin' || userRol === 'trafico') && (
+        {/* Solo para Admin */}
+        {userRol === 'admin' && (
           <Pressable
             style={({ pressed }) => [styles.navItem, pressed && styles.navItemPressed]}
             onPress={() => navigation.navigate('ubicacion_tiempo_real')}
