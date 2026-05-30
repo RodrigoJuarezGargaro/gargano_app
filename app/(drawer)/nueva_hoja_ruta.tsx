@@ -71,7 +71,8 @@ export default function NuevaHojaRutaScreen() {
     cliente: string;
     remito: string;
   }>({ visible: false, mensaje: '', chofer: '', cliente: '', remito: '' });
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [isConfirmingDelivery, setIsConfirmingDelivery] = useState(false);
+  const [choferesConNotificaciones, setChoferesConNotificaciones] = useState<Map<string, boolean>>(new Map());
 
 
   useEffect(() => {
@@ -97,26 +98,6 @@ export default function NuevaHojaRutaScreen() {
 
       const rol = String(sessionData.perfil_nombre || sessionData.rol || '').trim().toLowerCase();
       setUserRol(rol);
-      
-      // Verificar si las notificaciones están activadas
-      const checkNotifications = async () => {
-        try {
-          const usuario = sessionData.nombre_usuario || sessionData.login;
-          if (!usuario) return;
-          
-          const response = await fetch(
-            `https://gargano-proxy.vercel.app/api/proxy?endpoint=verificar_token_notificacion&usuario=${usuario}`,
-            { method: 'GET' }
-          );
-          const result = await response.json();
-          setNotificationsEnabled(result.success && result.tiene_token);
-        } catch (error) {
-          console.error('Error verificando notificaciones:', error);
-          setNotificationsEnabled(false);
-        }
-      };
-      
-      checkNotifications();
       await fetchHojaRuta(displayName, rol);
     };
 
@@ -245,6 +226,9 @@ export default function NuevaHojaRutaScreen() {
       // console.log('Hoja de ruta data:', data);
       const routes = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
       setHojaRuta(routes);
+      
+      // Verificar notificaciones de choferes
+      await verificarNotificacionesChoferes(routes);
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.error('Hoja de ruta timeout: el backend tardo mas de 120 segundos en responder.');
@@ -254,6 +238,41 @@ export default function NuevaHojaRutaScreen() {
     } finally {
       setIsLoadingRoutes(false);
     }
+  };
+
+  const verificarNotificacionesChoferes = async (routes: unknown[]) => {
+    // Extraer choferes únicos
+    const choferesUnicos = new Set<string>();
+    routes.forEach(ruta => {
+      const rutaObj = typeof ruta === 'object' && ruta !== null ? (ruta as Record<string, unknown>) : {};
+      const chofer = String(rutaObj.cod_chof || '').trim();
+      if (chofer && chofer !== '-') {
+        choferesUnicos.add(chofer);
+      }
+    });
+
+    // Consultar endpoint para cada chofer
+    const resultados = new Map<string, boolean>();
+    const promesas = Array.from(choferesUnicos).map(async (chofer) => {
+      try {
+        const response = await fetch(
+          `https://gargano-proxy.vercel.app/api/proxy?endpoint=verificar_token_notificacion/${encodeURIComponent(chofer)}`,
+          { method: 'GET' }
+        );
+        
+        if (response.status === 200) {
+          resultados.set(chofer, true);
+        } else {
+          resultados.set(chofer, false);
+        }
+      } catch (error) {
+        console.error(`Error verificando notificaciones de ${chofer}:`, error);
+        resultados.set(chofer, false);
+      }
+    });
+
+    await Promise.all(promesas);
+    setChoferesConNotificaciones(resultados);
   };
 
   const formateoFecha = (fecha: string) => {
@@ -313,6 +332,7 @@ export default function NuevaHojaRutaScreen() {
         {
           text: 'Confirmar y tomar foto',
           onPress: async () => {
+            setIsConfirmingDelivery(true);
             try {
               // 1. Verificar si el remito existe
               const existeResponse = await fetch(
@@ -333,6 +353,7 @@ export default function NuevaHojaRutaScreen() {
               );
               const existeData = await existeResponse.json();
               if (!existeResponse.ok) {
+                setIsConfirmingDelivery(false);
                 Toast.show({ type: 'error', text1: existeData?.error ? JSON.stringify(existeData.error) : 'No se pudo verificar el remito.' });
                 return;
               }
@@ -359,11 +380,13 @@ export default function NuevaHojaRutaScreen() {
                 if (!insertarResponse.ok) {
                   // Toast.show({ type: 'error', text1: insertarData?.error ? JSON.stringify(insertarData.error) : 'No se pudo insertar el remito.' });
                   console.error('Error insertando remito:', insertarResponse.status, insertarData);
+                  setIsConfirmingDelivery(false);
                   return;
                 }
 
                 if (!insertarData?.insertado) {
                   console.error('Error insertando remito:', insertarResponse.status, insertarData);
+                  setIsConfirmingDelivery(false);
                   Toast.show({ type: 'error', text1: 'No se pudo insertar el remito.' });
                   return;
                 }
@@ -387,11 +410,13 @@ export default function NuevaHojaRutaScreen() {
                 );
                 const actualizarData = await actualizarResponse.json();
                 if (!actualizarResponse.ok) {
+                  setIsConfirmingDelivery(false);
                   Toast.show({ type: 'error', text1: actualizarData?.error ? JSON.stringify(actualizarData.error) : 'No se pudo actualizar el remito.' });
                   return;
                 }
 
                 if (!actualizarData?.actualizado) {
+                  setIsConfirmingDelivery(false);
                   Toast.show({ type: 'error', text1: 'No se pudo actualizar el remito.' });
                   return;
                 }
@@ -414,6 +439,7 @@ export default function NuevaHojaRutaScreen() {
               );
               const guardarFechaData = await guardarFechaResponse.json();
               if (!guardarFechaResponse.ok) {
+                setIsConfirmingDelivery(false);
                 Toast.show({ type: 'error', text1: guardarFechaData?.error ? JSON.stringify(guardarFechaData.error) : 'No se pudo guardar la fecha de entrega.' });
                 return;
               }
@@ -426,13 +452,16 @@ export default function NuevaHojaRutaScreen() {
                 // 5. Abrir cámara automáticamente para tomar la foto
                 // Se usa setTimeout para dar tiempo a que se cierre el Alert y se muestre el Toast
                 setTimeout(() => {
+                  setIsConfirmingDelivery(false);
                   handleTakePhoto(empresa, tdoc, letra, sucursal, numero);
                 }, 500);
               } else {
+                setIsConfirmingDelivery(false);
                 Toast.show({ type: 'error', text1: 'No se pudo guardar la fecha de entrega.' });
               }
             } catch (error) {
               console.error('Error confirmando entrega:', error);
+              setIsConfirmingDelivery(false);
               Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
             }
           },
@@ -1081,6 +1110,14 @@ export default function NuevaHojaRutaScreen() {
                         <View style={styles.routeCardInfoGroup}>
                           <Ionicons name="person-outline" size={14} color="#7A8698" />
                           <Text style={styles.routeCardInfoText}>{chofer}</Text>
+                          {choferesConNotificaciones.has(chofer) && (
+                            <Ionicons 
+                              name={choferesConNotificaciones.get(chofer) ? "notifications" : "notifications-off"} 
+                              size={12} 
+                              color={choferesConNotificaciones.get(chofer) ? "#4CAF50" : "#F44336"} 
+                              style={{ marginLeft: 4 }}
+                            />
+                          )}
                         </View>
                       </View>
                       <Text style={todosConfirmados ? styles.detalleConfirmadoSi : styles.detalleConfirmadoNo}>
@@ -1198,6 +1235,23 @@ export default function NuevaHojaRutaScreen() {
                                       <Ionicons name="camera-outline" size={15} color="#C8D0F0" />
                                     )}
                                   </Pressable>
+                                  {/* Botón Consultar al chofer - También disponible en remitos confirmados */}
+                                  {(userRol === 'admin' || userRol === 'trafico' || userRol === 'analista') && (
+                                    <Pressable
+                                      onPress={() => handleConsultarChofer(chofer, cliente, letra, sucur, numero)}
+                                      style={styles.consultarButton}>
+                                      <Ionicons name="chatbubble-ellipses-outline" size={13} color="#DCE2F1" />
+                                      <Text style={styles.consultarButtonText}>Consultar</Text>
+                                      {choferesConNotificaciones.has(chofer) && (
+                                        <Ionicons 
+                                          name={choferesConNotificaciones.get(chofer) ? "notifications" : "notifications-off"} 
+                                          size={11} 
+                                          color={choferesConNotificaciones.get(chofer) ? "#4CAF50" : "#F44336"} 
+                                          style={{ marginLeft: 4 }}
+                                        />
+                                      )}
+                                    </Pressable>
+                                  )}
                                 </View>
                               ) : (
                                 <View style={styles.actionButtonsRow}>
@@ -1219,13 +1273,21 @@ export default function NuevaHojaRutaScreen() {
                                     <Ionicons name="git-branch-outline" size={13} color="#F2E8FF" />
                                     <Text style={styles.partialButtonText}>Parcial</Text>
                                   </Pressable>
-                                  {/* Botón Consultar al chofer - Solo para admin, tráfico, analistas con notificaciones activas */}
-                                  {(userRol === 'admin' || userRol === 'trafico' || userRol === 'analista') && notificationsEnabled && (
+                                  {/* Botón Consultar al chofer - Solo para admin, tráfico, analistas */}
+                                  {(userRol === 'admin' || userRol === 'trafico' || userRol === 'analista') && (
                                     <Pressable
                                       onPress={() => handleConsultarChofer(chofer, cliente, letra, sucur, numero)}
                                       style={styles.consultarButton}>
                                       <Ionicons name="chatbubble-ellipses-outline" size={13} color="#DCE2F1" />
                                       <Text style={styles.consultarButtonText}>Consultar</Text>
+                                      {choferesConNotificaciones.has(chofer) && (
+                                        <Ionicons 
+                                          name={choferesConNotificaciones.get(chofer) ? "notifications" : "notifications-off"} 
+                                          size={11} 
+                                          color={choferesConNotificaciones.get(chofer) ? "#4CAF50" : "#F44336"} 
+                                          style={{ marginLeft: 4 }}
+                                        />
+                                      )}
                                     </Pressable>
                                   )}
                                   {/* {(det.img_path || det.img_archivo) && (
@@ -1469,6 +1531,17 @@ export default function NuevaHojaRutaScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Loader durante confirmación de entrega */}
+      {isConfirmingDelivery && (
+        <View style={styles.loaderOverlay}>
+          <View style={styles.loaderContainer}>
+            <ActivityIndicator size="large" color="#926FA9" />
+            <Text style={styles.loaderText}>Procesando entrega...</Text>
+            <Text style={styles.loaderSubtext}>Abriendo cámara al finalizar</Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -2301,5 +2374,39 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 14,
     fontWeight: '700',
+  },
+  // Estilos para Loader de Confirmación
+  loaderOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  loaderContainer: {
+    backgroundColor: '#1E2A40',
+    borderRadius: 16,
+    padding: 32,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2E3D56',
+    minWidth: 200,
+  },
+  loaderText: {
+    color: '#E8F0FE',
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 16,
+    textAlign: 'center',
+  },
+  loaderSubtext: {
+    color: '#8A96AC',
+    fontSize: 13,
+    marginTop: 6,
+    textAlign: 'center',
   },
 });
