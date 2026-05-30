@@ -24,8 +24,8 @@ export default function HojaRutaScreen() {
       const nombre = await AsyncStorage.getItem('nombre_usuario');
       if (nombre) {
         setNombreUsuario(nombre);
-        // Verificar si tiene notificaciones activadas
-        checkNotificationsInBackend(nombre);
+        // Verificar y actualizar token si es necesario
+        await verificarYActualizarToken(nombre);
       } else {
         setIsCheckingPermissions(false);
       }
@@ -33,16 +33,97 @@ export default function HojaRutaScreen() {
     loadUserData();
   }, []);
 
-  const checkNotificationsInBackend = async (usuario: string) => {
+  const verificarYActualizarToken = async (usuario: string) => {
     try {
-      const response = await fetch(
-        `${API_BASE_URL}verificar_token_notificacion&usuario=${usuario}`,
+      // 1. Verificar si tiene token en la BD
+      const verificarResponse = await fetch(
+        `${API_BASE_URL}verificar_token_notificacion/${encodeURIComponent(usuario)}`,
         { method: 'GET' }
       );
-      const result = await response.json();
-      setNotificationsEnabled(result.success && result.tiene_token);
+      
+      if (verificarResponse.status === 404) {
+        // No tiene token guardado
+        setNotificationsEnabled(false);
+        setIsCheckingPermissions(false);
+        return;
+      }
+
+      const verificarData = await verificarResponse.json();
+      const tokenEnBD = verificarData.token;
+
+      if (!tokenEnBD) {
+        setNotificationsEnabled(false);
+        setIsCheckingPermissions(false);
+        return;
+      }
+
+      // 2. El usuario tiene token en BD, verificar si sigue siendo válido
+      setNotificationsEnabled(true);
+
+      // 3. Obtener token actual del dispositivo (solo si es dispositivo físico)
+      if (!Device.isDevice) {
+        setIsCheckingPermissions(false);
+        return;
+      }
+
+      try {
+        const { status } = await Notifications.getPermissionsAsync();
+        
+        if (status !== 'granted') {
+          // Ya no tiene permisos, desactivar notificaciones
+          console.log('[TokenSync] Permisos de notificaciones revocados');
+          setNotificationsEnabled(false);
+          setIsCheckingPermissions(false);
+          return;
+        }
+
+        // Obtener token actual
+        const tokenActual = await Notifications.getExpoPushTokenAsync({
+          projectId: 'fb941144-6082-4e3b-9fbf-7b3aeaa7149a',
+        });
+
+        // 4. Comparar tokens
+        if (tokenActual.data !== tokenEnBD) {
+          console.log('[TokenSync] Token desactualizado detectado');
+          console.log('[TokenSync] Token BD:', tokenEnBD);
+          console.log('[TokenSync] Token actual:', tokenActual.data);
+          
+          // Actualizar token en BD
+          const actualizarResponse = await fetch(
+            `${API_BASE_URL}guardar_token_notificacion`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                usuario: usuario,
+                token_notificacion: tokenActual.data,
+              }),
+            }
+          );
+
+          const actualizarData = await actualizarResponse.json();
+
+          if (actualizarData.success) {
+            console.log('[TokenSync] ✅ Token actualizado exitosamente');
+            Toast.show({
+              type: 'info',
+              text1: 'Token de notificaciones actualizado',
+              text2: 'Tus notificaciones siguen activas',
+              position: 'bottom',
+              visibilityTime: 2000,
+            });
+          } else {
+            console.error('[TokenSync] ❌ Error actualizando token:', actualizarData);
+          }
+        } else {
+          console.log('[TokenSync] ✅ Token vigente y actualizado');
+        }
+      } catch (tokenError) {
+        console.log('[TokenSync] No se pudo obtener token actual (puede ser emulador):', tokenError);
+        // Mantener notificaciones habilitadas si ya estaban en BD
+      }
     } catch (error) {
-      console.error('Error verificando notificaciones:', error);
+      console.error('[TokenSync] Error verificando notificaciones:', error);
       setNotificationsEnabled(false);
     } finally {
       setIsCheckingPermissions(false);
@@ -122,24 +203,17 @@ export default function HojaRutaScreen() {
           const result = await response.json();
 
           if (!response.ok || !result.success) {
+            console.error('[NotificationSetup] Error al guardar token:', result);
             Toast.show({
               type: 'error',
               text1: 'Error al Guardar Token',
-              text2: 'No se pudo guardar el token en el backend. Las notificaciones podrían no funcionar correctamente.',
+              text2: 'No se pudo registrar el token en el servidor.',
               position: 'bottom',
             });
-            console.error('Error al guardar token en backend:', result);
             throw new Error(result.message || 'Error al guardar el token');
           }
 
-          Toast.show({
-            type: 'success',
-            text1: 'Token Guardado',
-            text2: 'El token de notificaciones se guardó correctamente en el backend.',
-            position: 'bottom',
-          });
-
-          console.log('Token guardado exitosamente en el backend:', result);
+          console.log('[NotificationSetup] ✅ Token guardado/actualizado exitosamente');
         } catch (backendError) {
           console.error('Error al guardar el token en el backend:', backendError);
           Toast.show({
