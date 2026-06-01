@@ -1,5 +1,6 @@
 import { useBackgroundLocation } from '@/hooks/use-background-location';
 import { useLocation } from '@/hooks/use-location';
+import { logError, logLogout } from '@/services/logger';
 import { clearUserSession } from '@/services/session-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -232,9 +233,19 @@ export default function NuevaHojaRutaScreen() {
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.error('Hoja de ruta timeout: el backend tardo mas de 120 segundos en responder.');
+        await logError('NuevaHojaRuta', 'obtener_hoja_ruta', {
+          error: 'Timeout - backend tardó más de 120 segundos',
+          rol: userRol,
+          nombre: userName,
+        });
         return;
       }
       console.error('2_ Error fetching hoja de ruta:', error);
+      await logError('NuevaHojaRuta', 'obtener_hoja_ruta', {
+        error: error instanceof Error ? error.message : String(error),
+        rol: userRol,
+        nombre: userName,
+      });
     } finally {
       setIsLoadingRoutes(false);
     }
@@ -281,6 +292,7 @@ export default function NuevaHojaRutaScreen() {
   };
 
   const handleLogout = async () => {
+    await logLogout('Usuario cerró sesión desde nueva hoja de ruta');
     await clearUserSession();
     router.replace('/');
   };
@@ -524,6 +536,10 @@ export default function NuevaHojaRutaScreen() {
               }
             } catch (error) {
               console.error('Error anulando entrega:', error);
+              await logError('NuevaHojaRuta', 'anular_remito_app', {
+                error: error instanceof Error ? error.message : String(error),
+                remito: `${empresa}-${tdoc}-${letra}-${sucursal}-${numero}`,
+              });
               Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
             }
           },
@@ -721,6 +737,11 @@ export default function NuevaHojaRutaScreen() {
         }
         Alert.alert('Éxito', 'Imagen guardada correctamente.');
       } catch (error) {
+        console.error('Error guardando imagen:', error);
+        await logError('NuevaHojaRuta', 'guardar_imagen_remito_app', {
+          error: error instanceof Error ? error.message : String(error),
+          remito: `${empresa}-${tdoc}-${letra}-${sucur}-${numero}`,
+        });
         Alert.alert('Error', 'No se pudo conectar con el servidor.');
       } finally {
         setUploadingKey(null);

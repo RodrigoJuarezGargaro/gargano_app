@@ -18,6 +18,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
+import { logError, logLogin, logLogout } from '@/services/logger';
 import { clearUserSession, getUserSession } from '@/services/session-storage';
 
 // Proxy en Vercel que soluciona el problema de certificado SSL incompleto de gargano.com.ar
@@ -81,9 +82,20 @@ export default function HomeScreen() {
       await AsyncStorage.setItem('nombre_perfil', String(responseData.user.perfil_nombre));
       await AsyncStorage.setItem('nombre_usuario', String(responseData.user.nombre_usuario));
       await AsyncStorage.setItem('userSession', JSON.stringify(responseData.user));
+      
+      // Log de login exitoso
+      await logLogin(email);
+      
       router.replace('/hoja_ruta');
     } catch (error) {
       console.error('Error de red en el Proxy:', error);
+      
+      // Log del error
+      await logError('Login', 'login', {
+        error: error instanceof Error ? error.message : String(error),
+        email: email,
+      });
+      
       Toast.show({ type: 'error', text1: 'No se pudo conectar con el proxy. Verifica tu conexion a internet.' });
     } finally {
       setIsLoggingIn(false);
@@ -91,6 +103,7 @@ export default function HomeScreen() {
   };
 
   const handleClearSession = async () => {
+    await logLogout('Usuario limpió sesión manualmente desde pantalla de carga');
     await clearUserSession();
     setEmail('');
     setPassword('');

@@ -1,3 +1,4 @@
+import { logLogout } from '@/services/logger';
 import { clearUserSession } from '@/services/session-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -28,6 +29,7 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
   }, []);
 
   const handleLogout = async () => {
+    await logLogout('Usuario cerró sesión desde el menú lateral');
     await clearUserSession();
     router.replace('/');
   };

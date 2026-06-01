@@ -5,18 +5,19 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
+    ActivityIndicator,
+    Pressable,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    View,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
+import { logError, logLogout } from '@/services/logger';
 import { clearUserSession } from '@/services/session-storage';
 
 const API_TIMEOUT_MS = 30000;
@@ -161,6 +162,9 @@ export default function UbicacionTiempoRealScreen() {
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         console.error('Timeout obteniendo ubicaciones');
+        await logError('UbicacionTiempoReal', 'obtener_ubicacion_chofer', {
+          error: 'Timeout - servidor tardó más de 30 segundos',
+        });
         if (!silent) {
           Toast.show({
             type: 'error',
@@ -170,6 +174,9 @@ export default function UbicacionTiempoRealScreen() {
         }
       } else {
         console.error('Error obteniendo ubicaciones:', error);
+        await logError('UbicacionTiempoReal', 'obtener_ubicacion_chofer', {
+          error: error instanceof Error ? error.message : String(error),
+        });
         if (!silent) {
           Toast.show({
             type: 'error',
@@ -190,6 +197,7 @@ export default function UbicacionTiempoRealScreen() {
   };
 
   const handleLogout = async () => {
+    await logLogout('Usuario cerró sesión desde ubicación en tiempo real');
     await clearUserSession();
     router.replace('/');
   };

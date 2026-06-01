@@ -1,3 +1,4 @@
+import { logError, logLogout } from '@/services/logger';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
@@ -124,6 +125,10 @@ export default function HojaRutaScreen() {
       }
     } catch (error) {
       console.error('[TokenSync] Error verificando notificaciones:', error);
+      await logError('HojaRuta', 'verificar_token_notificacion', {
+        error: error instanceof Error ? error.message : String(error),
+        usuario: nombreUsuario,
+      });
       setNotificationsEnabled(false);
     } finally {
       setIsCheckingPermissions(false);
@@ -216,6 +221,10 @@ export default function HojaRutaScreen() {
           console.log('[NotificationSetup] ✅ Token guardado/actualizado exitosamente');
         } catch (backendError) {
           console.error('Error al guardar el token en el backend:', backendError);
+          await logError('HojaRuta', 'guardar_token_notificacion', {
+            error: backendError instanceof Error ? backendError.message : String(backendError),
+            usuario: nombreUsuario,
+          });
           Toast.show({
             type: 'error',
             text1: 'Error al Guardar Token',
@@ -268,6 +277,10 @@ export default function HojaRutaScreen() {
       }
     } catch (error) {
       console.error('Error general en notificaciones:', error);
+      await logError('HojaRuta', 'handleEnableNotifications', {
+        error: error instanceof Error ? error.message : String(error),
+        usuario: nombreUsuario,
+      });
       Alert.alert(
         'Error',
         'Ocurrió un error al configurar las notificaciones. Por favor, intenta nuevamente.',
@@ -277,6 +290,7 @@ export default function HojaRutaScreen() {
   };
 
   const handleLogout = async () => {
+    await logLogout('Usuario cerró sesión desde panel principal');
     await AsyncStorage.clear();
     router.replace('/');
   };
