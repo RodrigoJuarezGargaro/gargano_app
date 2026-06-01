@@ -234,7 +234,7 @@ export default function HomeScreen() {
             
             <View style={styles.modalBody}>
               <Text style={styles.modalMessage}>
-                El servidor no está disponible en este momento. Esto puede deberse a:
+                El servidor o la API no está disponible en este momento. Esto puede deberse a:
               </Text>
               
               <View style={styles.modalReasonsList}>
