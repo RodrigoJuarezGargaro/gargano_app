@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   Image,
   KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -20,6 +21,7 @@ import Toast from 'react-native-toast-message';
 
 import { logError, logLogin, logLogout } from '@/services/logger';
 import { forcePushTokenSync } from '@/services/push-token-sync';
+import { isServerDown } from '@/services/server-health';
 import { clearUserSession, getUserSession } from '@/services/session-storage';
 
 // Proxy en Vercel que soluciona el problema de certificado SSL incompleto de gargano.com.ar
@@ -33,6 +35,7 @@ export default function HomeScreen() {
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [showServerDownModal, setShowServerDownModal] = useState(false);
 
   useEffect(() => {
     console.log('Verificando sesion de usuario...');
@@ -102,7 +105,16 @@ export default function HomeScreen() {
         email: email,
       });
       
-      Toast.show({ type: 'error', text1: 'No se pudo conectar con el proxy. Verifica tu conexion a internet.' });
+      // Verificar si el servidor está caído
+      const serverIsDown = await isServerDown();
+      
+      if (serverIsDown) {
+        // Mostrar modal de servidor caído
+        setShowServerDownModal(true);
+      } else {
+        // Error de conexión del usuario
+        Toast.show({ type: 'error', text1: 'No se pudo conectar con el proxy. Verifica tu conexion a internet.' });
+      }
     } finally {
       setIsLoggingIn(false);
     }
@@ -206,6 +218,53 @@ export default function HomeScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Modal de Servidor Caído */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showServerDownModal}
+        onRequestClose={() => setShowServerDownModal(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalHeader}>
+              <Ionicons name="alert-circle" size={48} color="#F44336" />
+              <Text style={styles.modalTitle}>Servidor No Disponible</Text>
+            </View>
+            
+            <View style={styles.modalBody}>
+              <Text style={styles.modalMessage}>
+                El servidor no está disponible en este momento. Esto puede deberse a:
+              </Text>
+              
+              <View style={styles.modalReasonsList}>
+                <View style={styles.modalReasonItem}>
+                  <Ionicons name="ellipse" size={8} color="#A3ADBF" style={styles.bulletPoint} />
+                  <Text style={styles.modalReasonText}>Mantenimiento programado</Text>
+                </View>
+                <View style={styles.modalReasonItem}>
+                  <Ionicons name="ellipse" size={8} color="#A3ADBF" style={styles.bulletPoint} />
+                  <Text style={styles.modalReasonText}>Problemas técnicos temporales</Text>
+                </View>
+                <View style={styles.modalReasonItem}>
+                  <Ionicons name="ellipse" size={8} color="#A3ADBF" style={styles.bulletPoint} />
+                  <Text style={styles.modalReasonText}>Actualización del sistema</Text>
+                </View>
+              </View>
+              
+              <Text style={styles.modalFooterText}>
+                Por favor, intenta nuevamente en unos minutos. No es necesario contactar a sistemas.
+              </Text>
+            </View>
+            
+            <Pressable 
+              onPress={() => setShowServerDownModal(false)}
+              style={styles.modalCloseButton}>
+              <Text style={styles.modalCloseButtonText}>Entendido</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -360,5 +419,87 @@ const styles = StyleSheet.create({
     color: '#B7C2D8',
     fontSize: 14,
     fontWeight: '600',
+  },
+  // Estilos del Modal de Servidor Caído
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(6, 8, 13, 0.92)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    width: '100%',
+    maxWidth: 400,
+    backgroundColor: '#0F1419',
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#F44336',
+    padding: 24,
+    shadowColor: '#F44336',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  modalTitle: {
+    color: '#F44336',
+    fontSize: 22,
+    fontWeight: '700',
+    marginTop: 12,
+    textAlign: 'center',
+  },
+  modalBody: {
+    marginBottom: 24,
+  },
+  modalMessage: {
+    color: '#E8ECF7',
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  modalReasonsList: {
+    backgroundColor: '#1A1F28',
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 16,
+    gap: 12,
+  },
+  modalReasonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  bulletPoint: {
+    marginRight: 10,
+  },
+  modalReasonText: {
+    color: '#B3BCCE',
+    fontSize: 14,
+    lineHeight: 20,
+    flex: 1,
+  },
+  modalFooterText: {
+    color: '#9AA3B6',
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  modalCloseButton: {
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: '#926FA9',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalCloseButtonText: {
+    color: '#F6F1FB',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });
