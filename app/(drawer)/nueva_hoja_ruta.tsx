@@ -1131,7 +1131,7 @@ export default function NuevaHojaRutaScreen() {
                         <View style={styles.routeCardInfoGroup}>
                           <Ionicons name="person-outline" size={14} color="#7A8698" />
                           <Text style={styles.routeCardInfoText}>{chofer}</Text>
-                          {choferesConNotificaciones.has(chofer) && (
+                          {userRol === 'admin' && choferesConNotificaciones.has(chofer) && (
                             <Ionicons 
                               name={choferesConNotificaciones.get(chofer) ? "notifications" : "notifications-off"} 
                               size={12} 
@@ -1263,7 +1263,7 @@ export default function NuevaHojaRutaScreen() {
                                       style={styles.consultarButton}>
                                       <Ionicons name="chatbubble-ellipses-outline" size={13} color="#DCE2F1" />
                                       <Text style={styles.consultarButtonText}>Consultar</Text>
-                                      {choferesConNotificaciones.has(chofer) && (
+                                      {userRol === 'admin' && choferesConNotificaciones.has(chofer) && (
                                         <Ionicons 
                                           name={choferesConNotificaciones.get(chofer) ? "notifications" : "notifications-off"} 
                                           size={11} 
@@ -1294,14 +1294,13 @@ export default function NuevaHojaRutaScreen() {
                                     <Ionicons name="git-branch-outline" size={13} color="#F2E8FF" />
                                     <Text style={styles.partialButtonText}>Parcial</Text>
                                   </Pressable>
-                                  {/* Botón Consultar al chofer - Solo para admin, tráfico, analistas */}
-                                  {(userRol === 'admin' || userRol === 'trafico' || userRol === 'analista') && (
+                                  {(userRol === 'admin') && (
                                     <Pressable
                                       onPress={() => handleConsultarChofer(chofer, cliente, letra, sucur, numero)}
                                       style={styles.consultarButton}>
                                       <Ionicons name="chatbubble-ellipses-outline" size={13} color="#DCE2F1" />
                                       <Text style={styles.consultarButtonText}>Consultar</Text>
-                                      {choferesConNotificaciones.has(chofer) && (
+                                      {userRol === 'admin' && choferesConNotificaciones.has(chofer) && (
                                         <Ionicons 
                                           name={choferesConNotificaciones.get(chofer) ? "notifications" : "notifications-off"} 
                                           size={11} 

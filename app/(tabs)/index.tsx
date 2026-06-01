@@ -19,6 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
 import { logError, logLogin, logLogout } from '@/services/logger';
+import { forcePushTokenSync } from '@/services/push-token-sync';
 import { clearUserSession, getUserSession } from '@/services/session-storage';
 
 // Proxy en Vercel que soluciona el problema de certificado SSL incompleto de gargano.com.ar
@@ -85,6 +86,11 @@ export default function HomeScreen() {
       
       // Log de login exitoso
       await logLogin(email);
+      
+      // Sincronizar token push inmediatamente después del login
+      forcePushTokenSync().catch((err: unknown) => 
+        console.warn('[Login] Error sincronizando token push:', err)
+      );
       
       router.replace('/hoja_ruta');
     } catch (error) {
