@@ -105,81 +105,84 @@ export default function NuevaHojaRutaScreen() {
     loadSession();
   }, [router]);
 
-  // Efecto para gestionar el tracking de ubicación en segundo plano
-  // COMENTADO PARA EVITAR CRASHES EN DESARROLLO LOCAL
-  /* 
   useEffect(() => {
     const manageTracking = async () => {
-      // MODO TESTING: Se comenta la validación de rol para permitir tracking a todos
-      // Solo para choferes
-      // if (userRol !== 'chofer') {
-      //   // Si no es chofer pero el tracking está activo, detenerlo
-      //   if (isTrackingActive) {
-      //     console.log('[HojaRuta] Deteniendo tracking: usuario no es chofer');
-      //     await stopTracking();
-      //   }
-      //   return;
-      // }
+      if (userRol !== 'chofer') {
+        // Si no es chofer pero el tracking está activo, detenerlo
+        if (isTrackingActive) {
+          console.log('[HojaRuta] Deteniendo tracking: usuario no es chofer');
+          await stopTracking();
+        }
+        return;
+      }
 
-      // MODO TESTING: Iniciar tracking siempre, sin importar rutas pendientes
-      // if (!isTrackingActive) {
-        console.log('[HojaRuta] MODO TESTING: Iniciando tracking automáticamente');
+      // Si ya está activo, no hacer nada
+      if (isTrackingActive) {
+        console.log('[HojaRuta] Tracking ya está activo');
+        return;
+      }
+
+      // Verificar si es la primera vez que se piden permisos
+      const permissionsRequested = await AsyncStorage.getItem('locationPermissionsRequested');
+      
+      if (!permissionsRequested) {
+        // Primera vez: pedir permisos y guardar que ya se pidieron
+        console.log('[HojaRuta] Primera vez: solicitando permisos de ubicación');
+        
+        Toast.show({
+          type: 'info',
+          text1: 'Permisos de ubicación',
+          text2: 'Por favor autoriza el acceso a tu ubicación para el seguimiento de ruta',
+          position: 'bottom',
+          visibilityTime: 4000,
+        });
+
+        // Esperar 1 segundo para que el usuario vea el mensaje
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Intentar iniciar tracking (esto pedirá los permisos)
         const success = await startTracking();
+        
+        // Guardar que ya se pidieron permisos (independientemente del resultado)
+        await AsyncStorage.setItem('locationPermissionsRequested', 'true');
+        
         if (success) {
           console.log('[HojaRuta] ✅ Tracking activado exitosamente');
           Toast.show({
-            type: 'info',
+            type: 'success',
             text1: 'Seguimiento de ubicación activado',
-            text2: 'Modo testing: capturando coordenadas cada 30 segundos',
+            text2: 'Tu ubicación será registrada automáticamente durante tus rutas',
             position: 'bottom',
+            visibilityTime: 3000,
           });
         } else {
-          // Si falla (permisos denegados), solo registrar en consola sin molestar al usuario
-          console.log('[HojaRuta] ⚠️ No se pudo activar el tracking (permisos no otorgados o error)');
-          // NO mostrar Toast de error para no molestar al usuario
-        }
-      // }
-
-      // MODO PRODUCCIÓN (comentado para testing):
-      // Verificar si hay rutas pendientes (no confirmadas)
-      const hayRutasPendientes = hojaRuta.some(ruta => {
-        const rutaObj = typeof ruta === 'object' && ruta !== null ? (ruta as Record<string, unknown>) : {};
-        const detalles = Array.isArray(rutaObj.detalles) ? (rutaObj.detalles as Record<string, unknown>[]) : [];
-        return detalles.some(det => !det.confirmado);
-      });
-
-      if (hayRutasPendientes && !isTrackingActive) {
-        // Hay rutas pendientes y el tracking no está activo: iniciarlo
-        console.log('[HojaRuta] Iniciando tracking: hay rutas pendientes');
-        const success = await startTracking();
-        if (success) {
+          console.log('[HojaRuta] ⚠️ No se pudo activar el tracking (permisos denegados)');
           Toast.show({
-            type: 'info',
-            text1: 'Seguimiento de ubicación activado',
-            text2: 'Tu ubicación será registrada durante la ruta',
+            type: 'error',
+            text1: 'Permisos denegados',
+            text2: 'No podremos registrar tu ubicación sin los permisos necesarios',
             position: 'bottom',
+            visibilityTime: 4000,
           });
-        } else {
-          // Si falla (permisos denegados), solo registrar en consola sin molestar al usuario
-          console.log('[HojaRuta] ⚠️ No se pudo activar el tracking (permisos no otorgados)');
-          // NO mostrar Toast de error para no molestar al usuario
         }
-      } else if (!hayRutasPendientes && isTrackingActive) {
-        // No hay rutas pendientes y el tracking está activo: detenerlo
-        console.log('[HojaRuta] Deteniendo tracking: no hay rutas pendientes');
-        await stopTracking();
-        Toast.show({
-          type: 'info',
-          text1: 'Seguimiento de ubicación desactivado',
-          text2: 'Todas las rutas fueron completadas',
-          position: 'bottom',
-        });
+      } else {
+        // No es la primera vez: iniciar tracking silenciosamente
+        console.log('[HojaRuta] Iniciando tracking automáticamente (silencioso)');
+        const success = await startTracking();
+        
+        if (success) {
+          console.log('[HojaRuta] ✅ Tracking activado exitosamente');
+        } else {
+          console.log('[HojaRuta] ⚠️ No se pudo activar el tracking (verificar permisos en configuración)');
+        }
       }
     };
 
-    manageTracking();
-  }, [userRol, hojaRuta, isTrackingActive, startTracking, stopTracking]);
-  */
+    // Solo ejecutar si ya tenemos el rol del usuario
+    if (userRol) {
+      manageTracking();
+    }
+  }, [userRol, isTrackingActive, startTracking, stopTracking]);
 
   const fetchHojaRuta = async (nombre: string, rol: string, fecha?: Date) => {
     setIsLoadingRoutes(true);

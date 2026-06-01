@@ -5,13 +5,13 @@ import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Pressable,
-    RefreshControl,
-    ScrollView,
-    StyleSheet,
-    Text,
-    View,
+  ActivityIndicator,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -93,9 +93,9 @@ export default function UbicacionTiempoRealScreen() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
 
-      // Por ahora solo traemos la ubicación de Rodrigo Juarez
+      // Obtener ubicaciones de TODOS los choferes activos
       const response = await fetch(
-        'https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_ubicacion_chofer/Rodrigo%20Juarez',
+        'https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_ubicaciones_todos_choferes',
         {
           method: 'GET',
           headers: {
@@ -114,29 +114,19 @@ export default function UbicacionTiempoRealScreen() {
 
       const data = await response.json();
       console.log('[UbicacionTiempoReal] Respuesta del servidor:', data);
-      // El endpoint devuelve un objeto único, lo convertimos a array
-    //   [UbicacionTiempoReal] Respuesta del servidor: {"success": true, 
-    // "ubicaciones": [
-    // {"accuracy": "5", 
-    // "fecha_creacion": "2026-05-20T19:20:11.517000Z", 
-    // "heading": "0", 
-    // "latitude": "37.4219983", "longitude": "-122.084", "speed": "0", "tiempo_transcurrido": "17 seconds ago", "usuario": "Rodrigo Juarez"}]}
-      if (data && data.success && data.ubicaciones) {
-
-        console.log("############################===============================")
-        console.log('Datos de ubicación recibidos:', data);
-        console.log('Tiempo transcurrido:', data.ubicaciones[0].usuario, data.ubicaciones[0].tiempo_transcurrido);
-        console.log("############################===============================")
-        const ubicacionesArray = [{
-          usuario: data.ubicaciones[0].usuario || 'Rodrigo Juarez',
-          latitude: parseFloat(data.ubicaciones[0].latitude) || 0,
-          longitude: parseFloat(data.ubicaciones[0].longitude) || 0,
-          accuracy: parseFloat(data.ubicaciones[0].accuracy) || 0,
-          speed: data.ubicaciones[0].speed ? parseFloat(data.ubicaciones[0].speed) : null,
-          heading: data.ubicaciones[0].heading ? parseFloat(data.ubicaciones[0].heading) : null,
-          timestamp: data.ubicaciones[0].timestamp || data.ubicaciones[0].fecha_creacion || '',
-          tiempo_transcurrido: data.ubicaciones[0].tiempo_transcurrido || 'desconocido',
-        }];
+      
+      if (data && data.success && data.ubicaciones && Array.isArray(data.ubicaciones)) {
+        // Procesar TODAS las ubicaciones recibidas
+        const ubicacionesArray: UbicacionChofer[] = data.ubicaciones.map((ub: any) => ({
+          usuario: ub.usuario || 'Chofer desconocido',
+          latitude: parseFloat(ub.latitude) || 0,
+          longitude: parseFloat(ub.longitude) || 0,
+          accuracy: parseFloat(ub.accuracy) || 0,
+          speed: ub.speed ? parseFloat(ub.speed) : null,
+          heading: ub.heading ? parseFloat(ub.heading) : null,
+          timestamp: ub.timestamp || ub.fecha_creacion || '',
+          tiempo_transcurrido: ub.tiempo_transcurrido || 'desconocido',
+        }));
         
         setUbicaciones(ubicacionesArray);
         setLastUpdateTime(new Date());
@@ -144,8 +134,8 @@ export default function UbicacionTiempoRealScreen() {
         if (!silent) {
           Toast.show({
             type: 'success',
-            text1: 'Ubicación actualizada',
-            text2: `${data.ubicaciones[0].usuario}`,
+            text1: 'Ubicaciones actualizadas',
+            text2: `${ubicacionesArray.length} chofer${ubicacionesArray.length !== 1 ? 'es' : ''} activo${ubicacionesArray.length !== 1 ? 's' : ''}`,
             position: 'bottom',
           });
         }
@@ -155,7 +145,7 @@ export default function UbicacionTiempoRealScreen() {
           Toast.show({
             type: 'info',
             text1: 'Sin datos',
-            text2: 'No se encontró ubicación para el chofer',
+            text2: 'No se encontraron choferes con ubicación activa',
           });
         }
       }
