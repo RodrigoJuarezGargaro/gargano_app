@@ -1,3 +1,4 @@
+import { authenticatedFetch } from '@/services/auth-token';
 import { logError, logLogout } from '@/services/logger';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -37,9 +38,8 @@ export default function HojaRutaScreen() {
   const verificarYActualizarToken = async (usuario: string) => {
     try {
       // 1. Verificar si tiene token en la BD
-      const verificarResponse = await fetch(
-        `${API_BASE_URL}verificar_token_notificacion/${encodeURIComponent(usuario)}`,
-        { method: 'GET' }
+      const verificarResponse = await authenticatedFetch(
+        `verificar_token_notificacion/${encodeURIComponent(usuario)}`
       );
       
       if (verificarResponse.status === 404) {
@@ -90,11 +90,10 @@ export default function HojaRutaScreen() {
           console.log('[TokenSync] Token actual:', tokenActual.data);
           
           // Actualizar token en BD
-          const actualizarResponse = await fetch(
-            `${API_BASE_URL}guardar_token_notificacion`,
+          const actualizarResponse = await authenticatedFetch(
+            'guardar_token_notificacion',
             {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 usuario: usuario,
                 token_notificacion: tokenActual.data,
@@ -194,11 +193,8 @@ export default function HojaRutaScreen() {
             [{ text: 'Entendido' }]
           );
 
-          const response = await fetch(API_BASE_URL + 'guardar_token_notificacion', {
+          const response = await authenticatedFetch('guardar_token_notificacion', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
             body: JSON.stringify({
               usuario: usuario,
               token_notificacion: expoPushToken.data,

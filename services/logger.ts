@@ -87,6 +87,8 @@ export async function logEvent(params: LogParams): Promise<void> {
     };
     console.log('[Logger] Enviando log:', params.tipo, params.pantalla);
 
+    // NOTA: El logger NO usa autenticación porque necesitamos logs
+    // incluso cuando no hay sesión activa (errores de login, etc.)
     const response = await fetch(`${API_BASE_URL}guardar_log`, {
       method: 'POST',
       headers: {

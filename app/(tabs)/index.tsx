@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
+import { saveAuthToken } from '@/services/auth-token';
 import { logError, logLogin, logLogout } from '@/services/logger';
 import { forcePushTokenSync } from '@/services/push-token-sync';
 import { isServerDown } from '@/services/server-health';
@@ -59,11 +60,11 @@ export default function HomeScreen() {
   }, [router]);
 
   const handleLogin = async () => {
-    console.log('Intentando login via Proxy Vercel...');
-    console.log('URL del Proxy:', API_BASE_URL + 'login');
+    console.log('Intentando login con token via Proxy Vercel...');
+    console.log('URL del Proxy:', API_BASE_URL + 'login_token');
     setIsLoggingIn(true);
     try {
-      const response = await fetch(API_BASE_URL + 'login', {
+      const response = await fetch(API_BASE_URL + 'login_token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -74,11 +75,19 @@ export default function HomeScreen() {
 
       const responseData = await response.json();
 
-      if (!response.ok) {
+      if (!response.ok || !responseData.success) {
         const errorMessage = responseData?.message || `Error de login: ${response.status} ${response.statusText}`;
         Toast.show({ type: 'error', text1: errorMessage });
         console.error('Login failed:', errorMessage, responseData);
         return;
+      }
+
+      // Guardar token de autenticación
+      if (responseData.token) {
+        await saveAuthToken(responseData.token);
+        console.log('[Login] Token de autenticación guardado');
+      } else {
+        console.warn('[Login] Respuesta exitosa pero sin token');
       }
 
       // Guardar id_perfil y nombre_usuario en session
@@ -100,7 +109,7 @@ export default function HomeScreen() {
       console.error('Error de red en el Proxy:', error);
       
       // Log del error
-      await logError('Login', 'login', {
+      await logError('Login', 'login_token', {
         error: error instanceof Error ? error.message : String(error),
         email: email,
       });

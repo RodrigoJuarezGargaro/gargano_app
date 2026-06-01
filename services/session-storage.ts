@@ -1,4 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { clearAuthToken } from './auth-token';
 
 export type UserSession = {
   login: string;
@@ -75,6 +76,8 @@ export async function clearUserSession() {
 
   try {
     await AsyncStorage.removeItem(SESSION_KEY);
+    // También limpiar el token de autenticación
+    await clearAuthToken();
   } catch (error) {
     warnStorageIssueOnce('No se pudo limpiar sesión del storage:', error);
   }

@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
+import { authenticatedFetch, hasAuthToken } from './auth-token';
 import { logError } from './logger';
 
-const API_BASE_URL = 'https://gargano-proxy.vercel.app/api/proxy?endpoint=';
 const TOKEN_SYNC_INTERVAL = 24 * 60 * 60 * 1000; // 24 horas en milisegundos
 const LAST_SYNC_KEY = '@gargano/last_token_sync';
 
@@ -14,6 +14,13 @@ let syncIntervalId: ReturnType<typeof setInterval> | null = null;
  */
 async function syncPushToken(silent: boolean = true): Promise<void> {
   try {
+    // 0. Verificar que haya un token de autenticación
+    const isAuthenticated = await hasAuthToken();
+    if (!isAuthenticated) {
+      console.log('[PushTokenSync] Saltando sync - usuario no autenticado (sin token)');
+      return;
+    }
+
     // 1. Verificar que sea dispositivo físico
     if (!Device.isDevice) {
       console.log('[PushTokenSync] Saltando sync - no es dispositivo físico');
@@ -42,9 +49,8 @@ async function syncPushToken(silent: boolean = true): Promise<void> {
     });
 
     // 5. Verificar token en BD
-    const verificarResponse = await fetch(
-      `${API_BASE_URL}verificar_token_notificacion/${encodeURIComponent(usuario)}`,
-      { method: 'GET' }
+    const verificarResponse = await authenticatedFetch(
+      `verificar_token_notificacion/${encodeURIComponent(usuario)}`
     );
 
     if (verificarResponse.status === 404) {
@@ -83,11 +89,10 @@ async function syncPushToken(silent: boolean = true): Promise<void> {
  */
 async function guardarToken(usuario: string, token: string, silent: boolean): Promise<void> {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}guardar_token_notificacion`,
+    const response = await authenticatedFetch(
+      'guardar_token_notificacion',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           usuario: usuario,
           token_notificacion: token,
@@ -126,30 +131,37 @@ export async function startPushTokenSync(): Promise<void> {
   
   // Verificar si es necesario sincronizar inmediatamente
   try {
-    const lastSync = await AsyncStorage.getItem(LAST_SYNC_KEY);
-    const now = new Date().getTime();
-    
-    if (!lastSync) {
-      // Primera vez, sincronizar inmediatamente
-      console.log('[PushTokenSync] Primera sincronización');
-      await syncPushToken(true);
+    // Verificar que haya autenticación antes de sincronizar
+    const isAuthenticated = await hasAuthToken();
+    if (!isAuthenticated) {
+      console.log('[PushTokenSync] Usuario no autenticado, saltando sincronización inicial...');
+      // El intervalo se configurará de todas formas al final para verificar después
     } else {
-      const lastSyncTime = new Date(lastSync).getTime();
-      const timeSinceLastSync = now - lastSyncTime;
-      
-      if (timeSinceLastSync >= TOKEN_SYNC_INTERVAL) {
-        // Han pasado más de 24 horas, sincronizar
-        console.log('[PushTokenSync] Han pasado 24+ horas, sincronizando...');
+      const lastSync = await AsyncStorage.getItem(LAST_SYNC_KEY);
+      const now = new Date().getTime();
+    
+      if (!lastSync) {
+        // Primera vez, sincronizar inmediatamente
+        console.log('[PushTokenSync] Primera sincronización');
         await syncPushToken(true);
       } else {
-        const hoursRemaining = Math.floor((TOKEN_SYNC_INTERVAL - timeSinceLastSync) / (1000 * 60 * 60));
-        console.log(`[PushTokenSync] Próxima sincronización en ~${hoursRemaining} horas`);
+        const lastSyncTime = new Date(lastSync).getTime();
+        const timeSinceLastSync = now - lastSyncTime;
+        
+        if (timeSinceLastSync >= TOKEN_SYNC_INTERVAL) {
+          // Han pasado más de 24 horas, sincronizar
+          console.log('[PushTokenSync] Han pasado 24+ horas, sincronizando...');
+          await syncPushToken(true);
+        } else {
+          const hoursRemaining = Math.floor((TOKEN_SYNC_INTERVAL - timeSinceLastSync) / (1000 * 60 * 60));
+          console.log(`[PushTokenSync] Próxima sincronización en ~${hoursRemaining} horas`);
+        }
       }
     }
   } catch (error) {
     console.error('[PushTokenSync] Error verificando última sincronización:', error);
-    // En caso de error, sincronizar de todas formas
-    await syncPushToken(true);
+    // En caso de error, NO sincronizar para evitar crashes
+    // El intervalo lo intentará después
   }
 
   // Detener intervalo anterior si existe
