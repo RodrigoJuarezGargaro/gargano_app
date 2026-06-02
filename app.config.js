@@ -10,8 +10,10 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.rjuarezsorganization.garganologistica",
+      // 👇 AGREGÁ ESTA LÍNEA ACÁ PARA QUE ARREGLE EL POD INSTALL
+      usesGoogleMaps: true, 
       config: {
-        googleMapsApiKey: "TU_API_KEY_IOS_ACÁ"
+        googleMapsApiKey: "AIzaSyB17fwcFaFxrxz_tTpnnjMA7IlzLYmsJzM"
       },
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
@@ -70,6 +72,7 @@ module.exports = {
           isAndroidForegroundServiceEnabled: true
         }
       ],
+      "react-native-maps",
       [
         "expo-splash-screen",
         {
