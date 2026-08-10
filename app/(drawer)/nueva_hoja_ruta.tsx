@@ -10,7 +10,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -18,7 +18,108 @@ import Toast from 'react-native-toast-message';
 
 const API_RESPONSE_TIMEOUT_MS = 120000;
 
+/** Cuando el backend soporte filtros, pasar a true y se enviarán en la query. */
+const USE_SERVER_ANALISTA_FILTERS = false;
+
 let motivosRechazoCache: string[] | null = null;
+
+type AnalistaFilters = {
+  pendienteImagen: boolean;
+  hruta: string;
+  remito: string;
+};
+
+const emptyAnalistaFilters = (): AnalistaFilters => ({
+  pendienteImagen: false,
+  hruta: '',
+  remito: '',
+});
+
+const normalizeSearch = (value: string) =>
+  value.trim().toLowerCase().replace(/\s+/g, '');
+
+const isImagenPendiente = (det: Record<string, unknown>) =>
+  String(det.img_estado ?? '').trim() !== '1';
+
+const remitoMatchesQuery = (det: Record<string, unknown>, query: string) => {
+  const q = normalizeSearch(query);
+  if (!q) {
+    return true;
+  }
+
+  const letra = String(det.letra || '').trim();
+  const sucur = String(det.sucur || '').trim();
+  const numero = String(det.numero || '').trim();
+  const tdoc = String(det.tdoc || '').trim();
+  const combined = normalizeSearch(`${letra}-${sucur}-${numero}`);
+  const combinedAlt = normalizeSearch(`${letra}${sucur}${numero}`);
+  const numeroOnly = normalizeSearch(numero);
+  const full = normalizeSearch(`${tdoc}-${letra}-${sucur}-${numero}`);
+
+  return (
+    combined.includes(q) ||
+    combinedAlt.includes(q) ||
+    numeroOnly.includes(q) ||
+    full.includes(q) ||
+    q.includes(numeroOnly)
+  );
+};
+
+const filterDetallesForAnalista = (
+  detalles: Record<string, unknown>[],
+  filters: AnalistaFilters,
+) => {
+  return detalles.filter((det) => {
+    if (filters.pendienteImagen && !isImagenPendiente(det)) {
+      return false;
+    }
+    if (filters.remito && !remitoMatchesQuery(det, filters.remito)) {
+      return false;
+    }
+    return true;
+  });
+};
+
+const filterHojaRutaForAnalista = (
+  routes: unknown[],
+  filters: AnalistaFilters,
+) => {
+  const hrutaQuery = normalizeSearch(filters.hruta);
+  const hasDetalleFilter = filters.pendienteImagen || Boolean(filters.remito.trim());
+
+  return routes
+    .map((ruta) => {
+      const rutaObj = typeof ruta === 'object' && ruta !== null ? (ruta as Record<string, unknown>) : {};
+      const hruta_d = String(rutaObj.hruta_d || '').trim();
+
+      if (hrutaQuery && !normalizeSearch(hruta_d).includes(hrutaQuery)) {
+        return null;
+      }
+
+      const detalles = Array.isArray(rutaObj.detalles)
+        ? (rutaObj.detalles as Record<string, unknown>[])
+        : [];
+
+      if (!hasDetalleFilter) {
+        return rutaObj;
+      }
+
+      const filteredDetalles = filterDetallesForAnalista(detalles, filters);
+      if (filteredDetalles.length === 0) {
+        return null;
+      }
+
+      return { ...rutaObj, detalles: filteredDetalles };
+    })
+    .filter(Boolean) as Record<string, unknown>[];
+};
+
+const formatDateLocal = (date: Date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+};
 
 export default function NuevaHojaRutaScreen() {
   const router = useRouter();
@@ -64,6 +165,11 @@ export default function NuevaHojaRutaScreen() {
 
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [analistaFilters, setAnalistaFilters] = useState<AnalistaFilters>(emptyAnalistaFilters);
+  const selectedDateRef = useRef(selectedDate);
+  const analistaFiltersRef = useRef(analistaFilters);
+  selectedDateRef.current = selectedDate;
+  analistaFiltersRef.current = analistaFilters;
 
   const [consultarModal, setConsultarModal] = useState<{
     visible: boolean;
@@ -184,7 +290,12 @@ export default function NuevaHojaRutaScreen() {
     }
   }, [userRol, isTrackingActive, startTracking, stopTracking]);
 
-  const fetchHojaRuta = async (nombre: string, rol: string, fecha?: Date) => {
+  const fetchHojaRuta = async (
+    nombre: string,
+    rol: string,
+    fecha?: Date,
+    filters?: AnalistaFilters,
+  ) => {
     setIsLoadingRoutes(true);
     try {
       let response: Response;
@@ -192,10 +303,28 @@ export default function NuevaHojaRutaScreen() {
       const timeoutId = setTimeout(() => controller.abort(), API_RESPONSE_TIMEOUT_MS);
       try {
         if (rol === 'analista') {
-          const dateToUse = fecha || new Date();
-          const formattedDate = dateToUse.toISOString().split('T')[0]; // YYYY-MM-DD
+          // Siempre respetar la fecha filtrada (evitar caer en "hoy" por closures viejos).
+          const dateToUse = fecha ?? selectedDateRef.current ?? new Date();
+          const formattedDate = formatDateLocal(dateToUse);
+          const activeFilters = filters ?? analistaFiltersRef.current;
+
+          // Listo para backend: query params de filtros (hoy se ignoran si el endpoint no los soporta).
+          const query = new URLSearchParams();
+          if (USE_SERVER_ANALISTA_FILTERS) {
+            if (activeFilters.pendienteImagen) {
+              query.set('pendiente_imagen', '1');
+            }
+            if (activeFilters.hruta.trim()) {
+              query.set('hruta_d', activeFilters.hruta.trim());
+            }
+            if (activeFilters.remito.trim()) {
+              query.set('remito', activeFilters.remito.trim());
+            }
+          }
+
+          const querySuffix = query.toString() ? `?${query.toString()}` : '';
           response = await fetch(
-            `https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_hoja_ruta_por_fecha/${formattedDate}`,
+            `https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_hoja_ruta_por_fecha/${formattedDate}${querySuffix}`,
             { method: 'GET', signal: controller.signal }
           );
         } else if (rol === 'admin' || rol === 'trafico') {
@@ -252,6 +381,16 @@ export default function NuevaHojaRutaScreen() {
     } finally {
       setIsLoadingRoutes(false);
     }
+  };
+
+  /** Recarga manteniendo fecha y filtros del analista. */
+  const refreshHojaRuta = async () => {
+    await fetchHojaRuta(
+      userName,
+      userRol,
+      selectedDateRef.current,
+      analistaFiltersRef.current,
+    );
   };
 
   const verificarNotificacionesChoferes = async (routes: unknown[]) => {
@@ -462,7 +601,7 @@ export default function NuevaHojaRutaScreen() {
               if (guardarFechaData?.actualizado) {
                 updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, true);
                 Toast.show({ type: 'success', text1: 'Entrega confirmada correctamente.' });
-                await fetchHojaRuta(userName, userRol);
+                await refreshHojaRuta();
                 
                 // 5. Abrir cámara automáticamente para tomar la foto
                 // Se usa setTimeout para dar tiempo a que se cierre el Alert y se muestre el Toast
@@ -533,7 +672,7 @@ export default function NuevaHojaRutaScreen() {
               if (anularData?.anulado) {
                 updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, false);
                 Toast.show({ type: 'success', text1: 'Confirmacion anulada correctamente.' });
-                await fetchHojaRuta(userName, userRol);
+                await refreshHojaRuta();
               } else {
                 Toast.show({ type: 'error', text1: 'No se pudo anular el remito.' });
               }
@@ -629,6 +768,7 @@ export default function NuevaHojaRutaScreen() {
       if (rechazarData?.rechazado) {
         updateDetalleOptimistically(p.empresa, p.tdoc, p.letra, p.sucursal, p.numero, true);
         Toast.show({ type: 'success', text1: 'Remito rechazado correctamente.' });
+        await refreshHojaRuta();
       } else {
         Toast.show({ type: 'error', text1: 'No se pudo rechazar el remito.' });
       }
@@ -862,7 +1002,7 @@ export default function NuevaHojaRutaScreen() {
               if (parcialData?.entrega_parcial) {
                 updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, true);
                 Toast.show({ type: 'success', text1: 'Entrega parcial registrada correctamente.' });
-                await fetchHojaRuta(userName, userRol);
+                await refreshHojaRuta();
               } else {
                 Toast.show({ type: 'error', text1: 'No se pudo registrar la entrega parcial.' });
               }
@@ -956,6 +1096,36 @@ export default function NuevaHojaRutaScreen() {
         text2: 'No se pudo conectar con el servidor',
       });
     }
+  };
+
+  const hasActiveAnalistaFilters =
+    analistaFilters.pendienteImagen ||
+    Boolean(analistaFilters.hruta.trim()) ||
+    Boolean(analistaFilters.remito.trim());
+
+  const rutasVisibles = useMemo(() => {
+    if (userRol !== 'analista' || USE_SERVER_ANALISTA_FILTERS || !hasActiveAnalistaFilters) {
+      return hojaRuta;
+    }
+    return filterHojaRutaForAnalista(hojaRuta, analistaFilters);
+  }, [userRol, hojaRuta, analistaFilters, hasActiveAnalistaFilters]);
+
+  const clearAnalistaFilters = () => {
+    const cleared = emptyAnalistaFilters();
+    setAnalistaFilters(cleared);
+    setExpandedCards(new Set());
+    if (USE_SERVER_ANALISTA_FILTERS && userRol === 'analista') {
+      void fetchHojaRuta(userName, userRol, selectedDate, cleared);
+    }
+  };
+
+  const applyAnalistaFiltersToServer = () => {
+    setExpandedCards(new Set());
+    if (USE_SERVER_ANALISTA_FILTERS && userRol === 'analista') {
+      void fetchHojaRuta(userName, userRol, selectedDate, analistaFilters);
+      return;
+    }
+    // Filtro local: no requiere nueva llamada al backend.
   };
 
   return (
@@ -1073,11 +1243,90 @@ export default function NuevaHojaRutaScreen() {
                   setShowDatePicker(false);
                   if (date) {
                     setSelectedDate(date);
-                    fetchHojaRuta(userName, userRol, date);
+                    fetchHojaRuta(userName, userRol, date, analistaFilters);
                   }
                 }}
               />
             )}
+
+            <Text style={[styles.datePickerLabel, { marginTop: 14 }]}>Filtros</Text>
+
+            <Pressable
+              style={[
+                styles.filterChip,
+                analistaFilters.pendienteImagen && styles.filterChipActive,
+              ]}
+              onPress={() => {
+                setAnalistaFilters((prev) => ({
+                  ...prev,
+                  pendienteImagen: !prev.pendienteImagen,
+                }));
+                setExpandedCards(new Set());
+              }}
+            >
+              <Ionicons
+                name="image-outline"
+                size={16}
+                color={analistaFilters.pendienteImagen ? '#F2F5FB' : '#A0C4FF'}
+              />
+              <Text
+                style={[
+                  styles.filterChipText,
+                  analistaFilters.pendienteImagen && styles.filterChipTextActive,
+                ]}
+              >
+                Pendiente de imagen
+              </Text>
+            </Pressable>
+
+            <View style={styles.filterInputRow}>
+              <Ionicons name="document-text-outline" size={16} color="#8A96AC" />
+              <TextInput
+                style={styles.filterInput}
+                placeholder="Buscar HR (ej: 247632)"
+                placeholderTextColor="#6A7A96"
+                value={analistaFilters.hruta}
+                keyboardType="number-pad"
+                onChangeText={(text) =>
+                  setAnalistaFilters((prev) => ({ ...prev, hruta: text }))
+                }
+                onSubmitEditing={applyAnalistaFiltersToServer}
+                returnKeyType="search"
+              />
+            </View>
+
+            <View style={styles.filterInputRow}>
+              <Ionicons name="receipt-outline" size={16} color="#8A96AC" />
+              <TextInput
+                style={styles.filterInput}
+                placeholder="Buscar remito (ej: R-1-1016 o 1016)"
+                placeholderTextColor="#6A7A96"
+                value={analistaFilters.remito}
+                autoCapitalize="characters"
+                onChangeText={(text) =>
+                  setAnalistaFilters((prev) => ({ ...prev, remito: text }))
+                }
+                onSubmitEditing={applyAnalistaFiltersToServer}
+                returnKeyType="search"
+              />
+            </View>
+
+            <View style={styles.filterActionsRow}>
+              <Text style={styles.filterResultCount}>
+                {isLoadingRoutes
+                  ? 'Buscando...'
+                  : `${rutasVisibles.length} HR${rutasVisibles.length === 1 ? '' : 's'}`}
+                {hasActiveAnalistaFilters && !USE_SERVER_ANALISTA_FILTERS
+                  ? ' (filtro local)'
+                  : ''}
+              </Text>
+              {hasActiveAnalistaFilters ? (
+                <Pressable onPress={clearAnalistaFilters} style={styles.filterClearButton}>
+                  <Ionicons name="close-circle-outline" size={15} color="#E8A0A0" />
+                  <Text style={styles.filterClearButtonText}>Limpiar</Text>
+                </Pressable>
+              ) : null}
+            </View>
           </View>
         )}
 
@@ -1086,14 +1335,18 @@ export default function NuevaHojaRutaScreen() {
             {isLoadingRoutes ? 'Cargando hojas de ruta...' : 'Hojas de ruta'}
           </Text>
 
-          {hojaRuta.length === 0 ? (
+          {rutasVisibles.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>
-                {isLoadingRoutes ? 'Obteniendo rutas...' : 'Sin hojas de ruta asignadas'}
+                {isLoadingRoutes
+                  ? 'Obteniendo rutas...'
+                  : hasActiveAnalistaFilters
+                    ? 'Sin resultados para los filtros aplicados'
+                    : 'Sin hojas de ruta asignadas'}
               </Text>
             </View>
           ) : (
-            hojaRuta.map((ruta, index) => {
+            rutasVisibles.map((ruta, index) => {
               const rutaObj = typeof ruta === 'object' && ruta !== null ? (ruta as Record<string, unknown>) : {};
               const hruta_d = String(rutaObj.hruta_d || `Hoja ${index + 1}`);
               const fecha = String(rutaObj.fecha || 'Sin fecha');
@@ -2210,6 +2463,72 @@ const styles = StyleSheet.create({
   datePickerButtonText: {
     color: '#E8ECF7',
     fontSize: 15,
+    fontWeight: '600',
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3A5080',
+    backgroundColor: '#1A2540',
+    marginBottom: 10,
+  },
+  filterChipActive: {
+    backgroundColor: '#4A3A6A',
+    borderColor: '#926FA9',
+  },
+  filterChipText: {
+    color: '#A0C4FF',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  filterChipTextActive: {
+    color: '#F2F5FB',
+  },
+  filterInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#1A2540',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#3A5080',
+    marginBottom: 8,
+  },
+  filterInput: {
+    flex: 1,
+    color: '#E8ECF7',
+    fontSize: 14,
+    paddingVertical: 4,
+  },
+  filterActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  filterResultCount: {
+    color: '#8A96AC',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  filterClearButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  filterClearButtonText: {
+    color: '#E8A0A0',
+    fontSize: 12,
     fontWeight: '600',
   },
   trackingIndicator: {

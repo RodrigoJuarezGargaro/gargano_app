@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   KeyboardAvoidingView,
   Modal,
@@ -20,10 +21,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
 import { saveAuthToken } from '@/services/auth-token';
+import {
+  authenticateWithBiometrics,
+  enableBiometricLogin,
+  getBiometricPromptMessage,
+  getBiometricTypeLabel,
+  isBiometricHardwareAvailable,
+  isBiometricLoginEnabled,
+} from '@/services/biometric-auth';
 import { logError, logLogin, logLogout } from '@/services/logger';
 import { forcePushTokenSync } from '@/services/push-token-sync';
 import { isServerDown } from '@/services/server-health';
-import { clearUserSession, getUserSession } from '@/services/session-storage';
+import {
+  clearUserSession,
+  getStoredLoginUsername,
+  hasPersistedLogin,
+  saveUserSessionFromResponse,
+} from '@/services/session-storage';
 
 // Proxy en Vercel que soluciona el problema de certificado SSL incompleto de gargano.com.ar
 const API_BASE_URL = 'https://gargano-proxy.vercel.app/api/proxy?endpoint=';
@@ -36,14 +50,143 @@ export default function HomeScreen() {
   const [secureTextEntry, setSecureTextEntry] = useState(true);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isAuthenticatingBiometric, setIsAuthenticatingBiometric] = useState(false);
+  const [showBiometricButton, setShowBiometricButton] = useState(false);
+  const [biometricLabel, setBiometricLabel] = useState('huella dactilar');
   const [showServerDownModal, setShowServerDownModal] = useState(false);
+
+  const navigateToHome = () => {
+    router.replace('/hoja_ruta');
+  };
+
+  const persistLoginData = async (responseData: { token?: string; user: Record<string, unknown> }, loginEmail: string) => {
+    if (responseData.token) {
+      await saveAuthToken(responseData.token);
+      console.log('[Login] Token de autenticación guardado');
+    } else {
+      console.warn('[Login] Respuesta exitosa pero sin token');
+    }
+
+    await saveUserSessionFromResponse(responseData, loginEmail);
+    await AsyncStorage.setItem('id_perfil', String(responseData.user.id_perfil));
+    await AsyncStorage.setItem('nombre_perfil', String(responseData.user.perfil_nombre));
+    await AsyncStorage.setItem('nombre_usuario', String(responseData.user.nombre_usuario));
+    await AsyncStorage.setItem('userSession', JSON.stringify(responseData.user));
+
+    await logLogin(loginEmail);
+
+    forcePushTokenSync().catch((err: unknown) =>
+      console.warn('[Login] Error sincronizando token push:', err),
+    );
+  };
+
+  const offerBiometricActivation = async () => {
+    const hardwareAvailable = await isBiometricHardwareAvailable();
+    const alreadyEnabled = await isBiometricLoginEnabled();
+
+    if (!hardwareAvailable || alreadyEnabled) {
+      navigateToHome();
+      return;
+    }
+
+    const label = await getBiometricTypeLabel();
+    const formattedLabel = `${label.charAt(0).toUpperCase()}${label.slice(1)}`;
+
+    const activateBiometrics = async () => {
+      try {
+        const result = await enableBiometricLogin();
+
+        if (result.enabled) {
+          Alert.alert(
+            `${formattedLabel} activada`,
+            result.message,
+            [{ text: 'Continuar', onPress: navigateToHome }],
+            { cancelable: false },
+          );
+          return;
+        }
+
+        Alert.alert(
+          'No se pudo activar',
+          result.message,
+          [
+            { text: `Continuar sin ${label}`, onPress: navigateToHome },
+            { text: 'Reintentar', onPress: () => void activateBiometrics() },
+          ],
+          { cancelable: false },
+        );
+      } catch (error) {
+        console.error('[Login] Error inesperado activando biometría:', error);
+        Alert.alert(
+          'No se pudo activar',
+          'Ocurrió un error inesperado. Podés continuar usando la app e intentarlo nuevamente en otro momento.',
+          [{ text: 'Continuar', onPress: navigateToHome }],
+          { cancelable: false },
+        );
+      }
+    };
+
+    Alert.alert(
+      'Acceso rápido',
+      `¿Quieres usar ${label} para ingresar la próxima vez?`,
+      [
+        {
+          text: 'Ahora no',
+          style: 'cancel',
+          onPress: navigateToHome,
+        },
+        {
+          text: 'Activar',
+          onPress: () => void activateBiometrics(),
+        },
+      ],
+      { cancelable: false },
+    );
+  };
+
+  const handleBiometricLogin = async () => {
+    setIsAuthenticatingBiometric(true);
+    try {
+      const success = await authenticateWithBiometrics(await getBiometricPromptMessage('login'));
+      if (success) {
+        navigateToHome();
+        return;
+      }
+
+      Toast.show({ type: 'info', text1: 'Ingresa con tu usuario y contraseña' });
+    } finally {
+      setIsAuthenticatingBiometric(false);
+    }
+  };
 
   useEffect(() => {
     console.log('Verificando sesion de usuario...');
     const checkSession = async () => {
-      const session = await getUserSession();
-      if (session) {
-        router.replace('/hoja_ruta');
+      const hardwareAvailable = await isBiometricHardwareAvailable();
+      const biometricEnabled = await isBiometricLoginEnabled();
+      const label = await getBiometricTypeLabel();
+      setBiometricLabel(label);
+      setShowBiometricButton(hardwareAvailable && biometricEnabled);
+
+      const storedUsername = await getStoredLoginUsername();
+      if (storedUsername) {
+        setEmail(storedUsername);
+      }
+
+      const hasLogin = await hasPersistedLogin();
+      if (hasLogin) {
+        if (biometricEnabled && hardwareAvailable) {
+          const success = await authenticateWithBiometrics(await getBiometricPromptMessage('login'));
+          if (success) {
+            navigateToHome();
+            return;
+          }
+
+          setIsCheckingSession(false);
+          return;
+        }
+
+        navigateToHome();
         return;
       }
 
@@ -82,29 +225,13 @@ export default function HomeScreen() {
         return;
       }
 
-      // Guardar token de autenticación
-      if (responseData.token) {
-        await saveAuthToken(responseData.token);
-        console.log('[Login] Token de autenticación guardado');
-      } else {
-        console.warn('[Login] Respuesta exitosa pero sin token');
+      // Guardar token y sesión — fuera del bloque de red para no confundir errores
+      try {
+        await persistLoginData(responseData, String(email).trim());
+      } catch (saveError) {
+        console.error('[Login] Error guardando sesión post-login:', saveError);
       }
-
-      // Guardar id_perfil y nombre_usuario en session
-      await AsyncStorage.setItem('id_perfil', String(responseData.user.id_perfil));
-      await AsyncStorage.setItem('nombre_perfil', String(responseData.user.perfil_nombre));
-      await AsyncStorage.setItem('nombre_usuario', String(responseData.user.nombre_usuario));
-      await AsyncStorage.setItem('userSession', JSON.stringify(responseData.user));
-      
-      // Log de login exitoso
-      await logLogin(email);
-      
-      // Sincronizar token push inmediatamente después del login
-      forcePushTokenSync().catch((err: unknown) => 
-        console.warn('[Login] Error sincronizando token push:', err)
-      );
-      
-      router.replace('/hoja_ruta');
+      await offerBiometricActivation();
     } catch (error) {
       console.error('Error de red en el Proxy:', error);
       
@@ -224,6 +351,36 @@ export default function HomeScreen() {
                   </Text>
               }
             </Pressable>
+
+            {showBiometricButton ? (
+              <>
+                <View style={styles.biometricDividerRow}>
+                  <View style={styles.divider} />
+                  <Text style={styles.biometricDividerText}>o</Text>
+                  <View style={styles.divider} />
+                </View>
+
+                <Pressable
+                  onPress={handleBiometricLogin}
+                  disabled={isAuthenticatingBiometric}
+                  style={[styles.biometricButton, isAuthenticatingBiometric && styles.loginButtonDisabled]}>
+                  {isAuthenticatingBiometric ? (
+                    <ActivityIndicator size="small" color="#926FA9" />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name={biometricLabel.includes('Face') ? 'scan-outline' : 'finger-print-outline'}
+                        size={22}
+                        color="#926FA9"
+                      />
+                      <Text style={styles.biometricButtonText}>
+                        Ingresar con {biometricLabel}
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              </>
+            ) : null}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -411,6 +568,34 @@ const styles = StyleSheet.create({
   loginButtonText: {
     color: '#F6F1FB',
     fontSize: 24,
+    fontWeight: '700',
+  },
+  biometricDividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 20,
+    marginBottom: 20,
+  },
+  biometricDividerText: {
+    color: '#A3ADBF',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  biometricButton: {
+    height: 50,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#926FA9',
+    backgroundColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  biometricButtonText: {
+    color: '#D8C4E6',
+    fontSize: 16,
     fontWeight: '700',
   },
   clearButton: {

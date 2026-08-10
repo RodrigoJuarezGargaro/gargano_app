@@ -1,5 +1,6 @@
 import { authenticatedFetch } from '@/services/auth-token';
 import { logError, logLogout } from '@/services/logger';
+import { logoutUser } from '@/services/session-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
@@ -287,7 +288,7 @@ export default function HojaRutaScreen() {
 
   const handleLogout = async () => {
     await logLogout('Usuario cerró sesión desde panel principal');
-    await AsyncStorage.clear();
+    await logoutUser(true);
     router.replace('/');
   };
 

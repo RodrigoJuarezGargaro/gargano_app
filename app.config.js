@@ -2,21 +2,21 @@ module.exports = {
   expo: {
     name: "Gargano Logistica",
     slug: "gargano-logistica",
-    version: "1.0.4",
+    version: "1.0.5",
     orientation: "portrait",
-    icon: "./assets/images/icon.png",
+    icon: "./assets/images/new_icon.png",
     scheme: "garganomobile",
     userInterfaceStyle: "automatic",
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.rjuarezsorganization.garganologistica",
-      // 👇 AGREGÁ ESTA LÍNEA ACÁ PARA QUE ARREGLE EL POD INSTALL
       usesGoogleMaps: true, 
       config: {
         googleMapsApiKey: "AIzaSyB17fwcFaFxrxz_tTpnnjMA7IlzLYmsJzM"
       },
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
+        NSFaceIDUsageDescription: "Gargano Logística usa Face ID para que puedas ingresar de forma rápida y segura.",
         UIBackgroundModes: ["location", "fetch"]
       }
     },
@@ -24,9 +24,9 @@ module.exports = {
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || "./google-services.json",
       adaptiveIcon: {
         backgroundColor: "#673E8A",
-        foregroundImage: "./assets/images/android-icon-foreground.png",
-        backgroundImage: "./assets/images/android-icon-background.png",
-        monochromeImage: "./assets/images/android-icon-monochrome.png"
+        foregroundImage: "./assets/images/new_icon.png",
+        backgroundImage: "./assets/images/new_icon.png",
+        monochromeImage: "./assets/images/new_icon.png"
       },
       predictiveBackGestureEnabled: false,
       package: "com.rjuarezsorganization.garganologistica",
@@ -35,7 +35,9 @@ module.exports = {
         "ACCESS_COARSE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "FOREGROUND_SERVICE_LOCATION",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
       ],
       config: {
         googleMaps: {
@@ -48,13 +50,21 @@ module.exports = {
       favicon: "./assets/images/favicon.png"
     },
     splash: {
-      image: "./assets/images/icon.png",
+      image: "./assets/images/new_icon.png",
       resizeMode: "contain",
       backgroundColor: "#673E8A"
     },
     plugins: [
       "expo-router",
       "expo-notifications",
+      "expo-secure-store",
+      [
+        "expo-local-authentication",
+        {
+          // Solo aplica en iOS. Android no tiene Face ID ni este permiso de sistema.
+          faceIDPermission: "Gargano Logística usa Face ID para que puedas ingresar de forma rápida y segura."
+        }
+      ],
       [
         "expo-image-picker",
         {

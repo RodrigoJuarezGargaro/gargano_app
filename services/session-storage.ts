@@ -1,5 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { clearAuthToken } from './auth-token';
+
+import { clearAuthToken, hasAuthToken } from './auth-token';
+import { disableBiometricLogin } from './biometric-auth';
 
 export type UserSession = {
   login: string;
@@ -8,6 +10,15 @@ export type UserSession = {
 };
 
 const SESSION_KEY = '@gargano/session';
+const USER_SESSION_KEY = 'userSession';
+const SESSION_KEYS = [
+  SESSION_KEY,
+  USER_SESSION_KEY,
+  'id_perfil',
+  'nombre_perfil',
+  'nombre_usuario',
+] as const;
+
 let inMemorySession: UserSession | null = null;
 let didWarnStorageError = false;
 
@@ -39,7 +50,7 @@ export async function saveUserSessionFromResponse(responseData: unknown, fallbac
 
   const session: UserSession = {
     login: sanitizeText(source.login) || sanitizeText(fallbackEmail),
-    nombre: sanitizeText(source.nombre),
+    nombre: sanitizeText(source.nombre_usuario) || sanitizeText(source.nombre),
     mail: sanitizeText(source.mail) || sanitizeText(fallbackEmail),
   };
 
@@ -57,28 +68,72 @@ export async function saveUserSessionFromResponse(responseData: unknown, fallbac
 export async function getUserSession() {
   try {
     const stored = await AsyncStorage.getItem(SESSION_KEY);
-    if (!stored) {
-      return inMemorySession;
+    if (stored) {
+      const parsed = JSON.parse(stored) as Partial<UserSession>;
+      const session = sanitizeSession(parsed);
+      inMemorySession = session;
+      return session;
     }
 
-    const parsed = JSON.parse(stored) as Partial<UserSession>;
-    const session = sanitizeSession(parsed);
-    inMemorySession = session;
-    return session;
+    const legacySession = await AsyncStorage.getItem(USER_SESSION_KEY);
+    if (legacySession) {
+      const parsed = JSON.parse(legacySession) as Record<string, unknown>;
+      const session = sanitizeSession({
+        login: parsed.login,
+        nombre: parsed.nombre_usuario ?? parsed.nombre,
+        mail: parsed.mail,
+      });
+      inMemorySession = session;
+      return session;
+    }
+
+    return inMemorySession;
   } catch (error) {
     warnStorageIssueOnce('Error leyendo sesión del storage. Se usara sesion en memoria:', error);
     return inMemorySession;
   }
 }
 
+export async function hasPersistedLogin(): Promise<boolean> {
+  const tokenExists = await hasAuthToken();
+  if (!tokenExists) {
+    return false;
+  }
+
+  const userSession = await AsyncStorage.getItem(USER_SESSION_KEY);
+  const typedSession = await AsyncStorage.getItem(SESSION_KEY);
+  return Boolean(userSession || typedSession);
+}
+
+export async function getStoredLoginUsername(): Promise<string | null> {
+  const session = await getUserSession();
+  if (session?.login) {
+    return session.login;
+  }
+
+  return null;
+}
+
 export async function clearUserSession() {
   inMemorySession = null;
 
   try {
-    await AsyncStorage.removeItem(SESSION_KEY);
-    // También limpiar el token de autenticación
+    await AsyncStorage.multiRemove([...SESSION_KEYS]);
     await clearAuthToken();
+    await disableBiometricLogin();
   } catch (error) {
     warnStorageIssueOnce('No se pudo limpiar sesión del storage:', error);
+  }
+}
+
+export async function logoutUser(clearAllStorage = false): Promise<void> {
+  await clearUserSession();
+
+  if (clearAllStorage) {
+    try {
+      await AsyncStorage.clear();
+    } catch (error) {
+      warnStorageIssueOnce('No se pudo limpiar todo el storage:', error);
+    }
   }
 }

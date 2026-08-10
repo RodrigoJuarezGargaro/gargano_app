@@ -4,31 +4,97 @@
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
-const AUTH_TOKEN_KEY = '@gargano/auth_token';
+// SecureStore solo admite alfanuméricos, ".", "-" y "_"
+const AUTH_TOKEN_KEY = 'gargano_auth_token';
+const LEGACY_AUTH_TOKEN_KEYS = ['@gargano/auth_token', 'gargano_auth_token'] as const;
+
+async function readTokenFromSecureStore(): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    return AsyncStorage.getItem(AUTH_TOKEN_KEY);
+  }
+
+  try {
+    return await SecureStore.getItemAsync(AUTH_TOKEN_KEY);
+  } catch (error) {
+    console.warn('[AuthToken] Error leyendo token de SecureStore:', error);
+    return null;
+  }
+}
+
+async function writeTokenToSecureStore(token: string): Promise<void> {
+  if (Platform.OS === 'web') {
+    await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+    return;
+  }
+
+  try {
+    await SecureStore.setItemAsync(AUTH_TOKEN_KEY, token);
+  } catch (error) {
+    console.warn('[AuthToken] SecureStore no disponible, usando AsyncStorage como fallback:', error);
+    await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+  }
+}
+
+async function deleteTokenFromSecureStore(): Promise<void> {
+  if (Platform.OS === 'web') {
+    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+    return;
+  }
+
+  try {
+    await SecureStore.deleteItemAsync(AUTH_TOKEN_KEY);
+  } catch (error) {
+    console.warn('[AuthToken] Error eliminando token de SecureStore:', error);
+  }
+}
+
+async function migrateLegacyTokenIfNeeded(): Promise<string | null> {
+  const secureToken = await readTokenFromSecureStore();
+  if (secureToken) {
+    return secureToken;
+  }
+
+  try {
+    for (const legacyKey of LEGACY_AUTH_TOKEN_KEYS) {
+      const legacyToken = await AsyncStorage.getItem(legacyKey);
+      if (!legacyToken) {
+        continue;
+      }
+
+      await writeTokenToSecureStore(legacyToken);
+      await AsyncStorage.multiRemove([...LEGACY_AUTH_TOKEN_KEYS]);
+      return legacyToken;
+    }
+
+    return null;
+  } catch (error) {
+    console.warn('[AuthToken] Error migrando token legacy:', error);
+    return null;
+  }
+}
 
 /**
- * Guarda el token de autenticación en AsyncStorage
- * @param token - Token de autenticación recibido del backend
+ * Guarda el token de autenticación en almacenamiento seguro
  */
 export async function saveAuthToken(token: string): Promise<void> {
   try {
-    await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
+    await writeTokenToSecureStore(token);
     console.log('[AuthToken] Token guardado exitosamente');
   } catch (error) {
-    console.error('[AuthToken] Error guardando token:', error);
-    throw error;
+    console.error('[AuthToken] Error guardando token, usando fallback AsyncStorage:', error);
+    await AsyncStorage.setItem(AUTH_TOKEN_KEY, token);
   }
 }
 
 /**
  * Obtiene el token de autenticación almacenado
- * @returns Token de autenticación o null si no existe
  */
 export async function getAuthToken(): Promise<string | null> {
   try {
-    const token = await AsyncStorage.getItem(AUTH_TOKEN_KEY);
-    return token;
+    return await migrateLegacyTokenIfNeeded();
   } catch (error) {
     console.error('[AuthToken] Error obteniendo token:', error);
     return null;
@@ -40,7 +106,8 @@ export async function getAuthToken(): Promise<string | null> {
  */
 export async function clearAuthToken(): Promise<void> {
   try {
-    await AsyncStorage.removeItem(AUTH_TOKEN_KEY);
+    await deleteTokenFromSecureStore();
+    await AsyncStorage.multiRemove([...LEGACY_AUTH_TOKEN_KEYS]);
     console.log('[AuthToken] Token eliminado exitosamente');
   } catch (error) {
     console.error('[AuthToken] Error eliminando token:', error);
@@ -50,7 +117,6 @@ export async function clearAuthToken(): Promise<void> {
 
 /**
  * Verifica si existe un token de autenticación válido
- * @returns true si existe un token, false si no
  */
 export async function hasAuthToken(): Promise<boolean> {
   const token = await getAuthToken();
@@ -59,21 +125,18 @@ export async function hasAuthToken(): Promise<boolean> {
 
 /**
  * Crea headers de autenticación para peticiones fetch
- * Incluye el token Bearer y headers comunes
- * @param additionalHeaders - Headers adicionales opcionales
- * @returns Headers configurados con autenticación
  */
 export async function getAuthHeaders(additionalHeaders?: Record<string, string>): Promise<HeadersInit> {
   const token = await getAuthToken();
-  
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'Accept': 'application/json',
+    Accept: 'application/json',
     ...additionalHeaders,
   };
 
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
 
   return headers;
@@ -81,13 +144,10 @@ export async function getAuthHeaders(additionalHeaders?: Record<string, string>)
 
 /**
  * Realiza una petición fetch autenticada con el token
- * @param endpoint - Endpoint a consultar (sin el prefijo del proxy)
- * @param options - Opciones de fetch (method, body, etc.)
- * @returns Response de la petición
  */
 export async function authenticatedFetch(
-  endpoint: string, 
-  options: RequestInit = {}
+  endpoint: string,
+  options: RequestInit = {},
 ): Promise<Response> {
   const API_BASE_URL = 'https://gargano-proxy.vercel.app/api/proxy?endpoint=';
   const authHeaders = await getAuthHeaders();
