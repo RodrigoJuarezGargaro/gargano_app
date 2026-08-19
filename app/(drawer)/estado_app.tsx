@@ -1,4 +1,4 @@
-import { logLogout } from '@/services/logger';
+import { logAccion, logLogout } from '@/services/logger';
 import { checkServerHealth, type ServerHealthStatus } from '@/services/server-health';
 import { logoutUser } from '@/services/session-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -17,9 +17,22 @@ export default function EstadoAppScreen() {
 
   const loadHealth = useCallback(async () => {
     setIsLoading(true);
+    void logAccion('health', { resultado: 'iniciado' }, 'EstadoApp');
     try {
       const status = await checkServerHealth();
       setHealth(status);
+      void logAccion(
+        'health',
+        {
+          resultado: status.isOnline ? 'ok' : 'error',
+          isOnline: status.isOnline,
+          message: status.message,
+          statusCode: status.statusCode ?? null,
+          latencyMs: status.latencyMs ?? null,
+          respuesta: status.raw ?? null,
+        },
+        'EstadoApp',
+      );
     } finally {
       setIsLoading(false);
     }
@@ -30,7 +43,7 @@ export default function EstadoAppScreen() {
   }, [loadHealth]);
 
   const handleLogout = async () => {
-    await logLogout('Usuario cerró sesión desde estado de la app');
+    await logLogout('desde estado de la app');
     await logoutUser(true);
     router.replace('/');
   };

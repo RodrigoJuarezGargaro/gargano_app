@@ -187,7 +187,7 @@ export default function UbicacionTiempoRealScreen() {
   };
 
   const handleLogout = async () => {
-    await logLogout('Usuario cerró sesión desde ubicación en tiempo real');
+    await logLogout('desde ubicación en tiempo real');
     await clearUserSession();
     router.replace('/');
   };

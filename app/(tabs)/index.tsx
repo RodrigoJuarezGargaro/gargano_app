@@ -257,7 +257,7 @@ export default function HomeScreen() {
   };
 
   const handleClearSession = async () => {
-    await logLogout('Usuario limpió sesión manualmente desde pantalla de carga');
+    await logLogout('manualmente desde pantalla de carga');
     await clearUserSession();
     setEmail('');
     setPassword('');

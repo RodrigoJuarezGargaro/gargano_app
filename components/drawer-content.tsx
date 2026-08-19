@@ -29,7 +29,7 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
   }, []);
 
   const handleLogout = async () => {
-    await logLogout('Usuario cerró sesión desde el menú lateral');
+    await logLogout('desde el menú lateral');
     await clearUserSession();
     router.replace('/');
   };

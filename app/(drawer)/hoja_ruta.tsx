@@ -287,7 +287,7 @@ export default function HojaRutaScreen() {
   };
 
   const handleLogout = async () => {
-    await logLogout('Usuario cerró sesión desde panel principal');
+    await logLogout('desde panel principal');
     await logoutUser(true);
     router.replace('/');
   };

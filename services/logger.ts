@@ -43,7 +43,7 @@ async function getUserId(): Promise<number | null> {
 }
 
 /**
- * Obtiene el username/login del usuario actual
+ * Obtiene el login del usuario actual (mismo valor que en el login, ej. rjuarez).
  */
 async function getUsername(explicit?: string | null): Promise<string | null> {
   const fromParam = typeof explicit === 'string' ? explicit.trim() : '';
@@ -52,24 +52,19 @@ async function getUsername(explicit?: string | null): Promise<string | null> {
   }
 
   try {
-    const storedName = (await AsyncStorage.getItem('nombre_usuario'))?.trim();
-    if (storedName) {
-      return storedName;
-    }
-
-    const sessionRaw = await AsyncStorage.getItem('userSession');
-    if (sessionRaw) {
-      const session = JSON.parse(sessionRaw) as Record<string, unknown>;
-      const login = String(session.login ?? session.nombre_usuario ?? session.nombre ?? '').trim();
+    const typedSessionRaw = await AsyncStorage.getItem('@gargano/session');
+    if (typedSessionRaw) {
+      const typedSession = JSON.parse(typedSessionRaw) as Record<string, unknown>;
+      const login = String(typedSession.login ?? '').trim();
       if (login) {
         return login;
       }
     }
 
-    const typedSessionRaw = await AsyncStorage.getItem('@gargano/session');
-    if (typedSessionRaw) {
-      const typedSession = JSON.parse(typedSessionRaw) as Record<string, unknown>;
-      const login = String(typedSession.login ?? typedSession.nombre ?? '').trim();
+    const sessionRaw = await AsyncStorage.getItem('userSession');
+    if (sessionRaw) {
+      const session = JSON.parse(sessionRaw) as Record<string, unknown>;
+      const login = String(session.login ?? '').trim();
       if (login) {
         return login;
       }
@@ -164,15 +159,16 @@ export async function logLogin(email: string): Promise<void> {
 /**
  * Log de cierre de sesión
  */
-export async function logLogout(reason?: string): Promise<void> {
+export async function logLogout(origen?: string): Promise<void> {
   const userId = await getUserId();
   const username = await getUsername();
   const quien = username || (userId !== null ? `ID ${userId}` : 'desconocido');
+  const donde = origen?.trim() ? ` ${origen.trim()}` : '';
   await logEvent({
     tipo: 'logout',
     pantalla: 'Session',
     username,
-    detalles: reason || `${quien} cerró sesión`,
+    detalles: `Usuario ${quien} cerró sesión${donde}`,
   });
 }
 
@@ -225,12 +221,13 @@ export async function logInfo(pantalla: string, mensaje: string): Promise<void> 
  * Log de acciones de entrega (confirmación, rechazo, parcial, etc.)
  */
 export async function logAccion(
-  accion: 'confirmacion' | 'rechazo' | 'parcial' | 'anular',
+  accion: 'confirmacion' | 'rechazo' | 'parcial' | 'anular' | 'health',
   detalles: Record<string, unknown>,
+  pantalla = 'NuevaHojaRuta',
 ): Promise<void> {
   await logEvent({
     tipo: 'accion',
-    pantalla: 'NuevaHojaRuta',
+    pantalla,
     detalles: JSON.stringify({ accion, ...detalles }).substring(0, 5000),
   });
 }

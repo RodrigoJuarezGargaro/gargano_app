@@ -465,7 +465,7 @@ export default function NuevaHojaRutaScreen() {
   };
 
   const handleLogout = async () => {
-    await logLogout(`Usuario ${userName} cerró sesión desde nueva hoja de ruta`);
+    await logLogout('desde nueva hoja de ruta');
     await clearUserSession();
     router.replace('/');
   };
