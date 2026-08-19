@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
 const API_BASE_URL = 'https://gargano-proxy.vercel.app/api/proxy?endpoint=';
-const APP_VERSION = '1.0.3'; // Sincronizado con app.config.js
+const APP_VERSION = require('../app.config.js').version;
 
 type LogType = 'login' | 'logout' | 'error' | 'info' | 'warning' | 'accion';
 
