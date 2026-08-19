@@ -14,12 +14,26 @@ async function handler(req, res) {
     return res.status(200).end();
   }
 
-  const { endpoint } = req.query;
+  const { endpoint, ...forwardQuery } = req.query;
   if (!endpoint) {
     return res.status(400).json({ error: 'Falta el parametro endpoint' });
   }
 
-  const targetUrl = `https://www.gargano.com.ar/laravel_backend_app/public/api/${endpoint}`;
+  const endpointPath = Array.isArray(endpoint) ? endpoint[0] : String(endpoint);
+  const extraParams = new URLSearchParams();
+  Object.entries(forwardQuery).forEach(([key, value]) => {
+    if (value === undefined || value === null) {
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item) => extraParams.append(key, String(item)));
+      return;
+    }
+    extraParams.append(key, String(value));
+  });
+
+  const querySuffix = extraParams.toString() ? `?${extraParams.toString()}` : '';
+  const targetUrl = `https://www.gargano.com.ar/laravel_backend_app/public/api/${endpointPath}${querySuffix}`;
   const contentType = req.headers['content-type'] || '';
   const isMultipart = contentType.includes('multipart/form-data');
 

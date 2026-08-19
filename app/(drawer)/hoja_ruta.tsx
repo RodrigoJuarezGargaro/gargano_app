@@ -336,6 +336,14 @@ export default function HojaRutaScreen() {
             <Ionicons name="location-outline" size={28} color="#6A8AAC" />
             <Text style={styles.navButtonText}>Ubicación en Tiempo Real</Text>
           </Pressable>
+
+          <Pressable 
+            style={({ pressed }) => [styles.navButton, pressed && styles.navButtonPressed]}
+            onPress={() => router.push('/(drawer)/estado_app')}
+          >
+            <Ionicons name="pulse-outline" size={28} color="#6FD78C" />
+            <Text style={styles.navButtonText}>Ver estado de la app</Text>
+          </Pressable>
         </View>
 
         {/* Notificaciones Push */}

@@ -10,6 +10,9 @@ export interface ServerHealthStatus {
   isOnline: boolean;
   message: string;
   statusCode?: number;
+  raw?: unknown;
+  latencyMs?: number;
+  checkedAt: string;
 }
 
 /**
@@ -17,6 +20,9 @@ export interface ServerHealthStatus {
  * @returns {Promise<ServerHealthStatus>} Estado del servidor
  */
 export async function checkServerHealth(): Promise<ServerHealthStatus> {
+  const checkedAt = new Date().toISOString();
+  const startedAt = Date.now();
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), HEALTH_CHECK_TIMEOUT);
@@ -30,34 +36,56 @@ export async function checkServerHealth(): Promise<ServerHealthStatus> {
     });
 
     clearTimeout(timeoutId);
+    const latencyMs = Date.now() - startedAt;
+
+    let raw: unknown = null;
+    try {
+      raw = await response.json();
+    } catch {
+      raw = null;
+    }
 
     if (response.ok) {
+      const messageFromApi =
+        raw && typeof raw === 'object' && raw !== null && 'message' in raw
+          ? String((raw as { message?: unknown }).message ?? '')
+          : '';
+
       return {
         isOnline: true,
-        message: 'Servidor operativo',
+        message: messageFromApi || 'Servidor operativo',
         statusCode: response.status,
-      };
-    } else {
-      return {
-        isOnline: false,
-        message: 'El servidor está experimentando problemas',
-        statusCode: response.status,
+        raw,
+        latencyMs,
+        checkedAt,
       };
     }
+
+    return {
+      isOnline: false,
+      message: 'El servidor está experimentando problemas',
+      statusCode: response.status,
+      raw,
+      latencyMs,
+      checkedAt,
+    };
   } catch (error) {
     console.error('[ServerHealth] Error verificando estado del servidor:', error);
     
-    // Si es un error de timeout o de red, el servidor probablemente está caído
     if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('Network'))) {
       return {
         isOnline: false,
         message: 'No se pudo conectar con el servidor',
+        latencyMs: Date.now() - startedAt,
+        checkedAt,
       };
     }
 
     return {
       isOnline: false,
       message: 'Error al verificar el estado del servidor',
+      latencyMs: Date.now() - startedAt,
+      checkedAt,
     };
   }
 }

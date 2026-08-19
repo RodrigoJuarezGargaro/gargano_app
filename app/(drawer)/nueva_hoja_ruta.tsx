@@ -1,25 +1,48 @@
 import { useBackgroundLocation } from '@/hooks/use-background-location';
 import { useLocation } from '@/hooks/use-location';
-import { logError, logLogout } from '@/services/logger';
+import { logAccion, logError, logLogout } from '@/services/logger';
 import { clearUserSession } from '@/services/session-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
+import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
 const API_RESPONSE_TIMEOUT_MS = 120000;
 
-/** Cuando el backend soporte filtros, pasar a true y se enviarán en la query. */
-const USE_SERVER_ANALISTA_FILTERS = false;
+/** Filtros de analista vía backend (obtener_hoja_ruta_por_fecha). */
+const USE_SERVER_ANALISTA_FILTERS = true;
+
+const resolveImagenUrl = (det: Record<string, unknown>): string | null => {
+  const path = String(det.img_path || '').trim();
+  const archivo = String(det.img_archivo || '').trim();
+
+  if (!path && !archivo) {
+    return null;
+  }
+  if (archivo.startsWith('http://') || archivo.startsWith('https://')) {
+    return encodeURI(archivo);
+  }
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    if (!archivo) {
+      return encodeURI(path);
+    }
+    const base = path.endsWith('/') ? path : `${path}/`;
+    return encodeURI(`${base}${archivo}`);
+  }
+  return null;
+};
+
+const isPdfUrl = (url: string) => /\.pdf(\?|#|$)/i.test(url);
 
 let motivosRechazoCache: string[] | null = null;
 
@@ -178,6 +201,14 @@ export default function NuevaHojaRutaScreen() {
     cliente: string;
     remito: string;
   }>({ visible: false, mensaje: '', chofer: '', cliente: '', remito: '' });
+  const [imagenModal, setImagenModal] = useState<{
+    visible: boolean;
+    url: string;
+    titulo: string;
+    isPdf: boolean;
+    loading: boolean;
+    error: boolean;
+  }>({ visible: false, url: '', titulo: '', isPdf: false, loading: false, error: false });
   const [isConfirmingDelivery, setIsConfirmingDelivery] = useState(false);
   const [choferesConNotificaciones, setChoferesConNotificaciones] = useState<Map<string, boolean>>(new Map());
 
@@ -308,8 +339,9 @@ export default function NuevaHojaRutaScreen() {
           const formattedDate = formatDateLocal(dateToUse);
           const activeFilters = filters ?? analistaFiltersRef.current;
 
-          // Listo para backend: query params de filtros (hoy se ignoran si el endpoint no los soporta).
+          // Query params aparte del endpoint (el proxy los reenvía a Laravel).
           const query = new URLSearchParams();
+          query.set('endpoint', `obtener_hoja_ruta_por_fecha/${formattedDate}`);
           if (USE_SERVER_ANALISTA_FILTERS) {
             if (activeFilters.pendienteImagen) {
               query.set('pendiente_imagen', '1');
@@ -322,9 +354,8 @@ export default function NuevaHojaRutaScreen() {
             }
           }
 
-          const querySuffix = query.toString() ? `?${query.toString()}` : '';
           response = await fetch(
-            `https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_hoja_ruta_por_fecha/${formattedDate}${querySuffix}`,
+            `https://gargano-proxy.vercel.app/api/proxy?${query.toString()}`,
             { method: 'GET', signal: controller.signal }
           );
         } else if (rol === 'admin' || rol === 'trafico') {
@@ -434,7 +465,7 @@ export default function NuevaHojaRutaScreen() {
   };
 
   const handleLogout = async () => {
-    await logLogout('Usuario cerró sesión desde nueva hoja de ruta');
+    await logLogout(`Usuario ${userName} cerró sesión desde nueva hoja de ruta`);
     await clearUserSession();
     router.replace('/');
   };
@@ -487,6 +518,18 @@ export default function NuevaHojaRutaScreen() {
           text: 'Confirmar y tomar foto',
           onPress: async () => {
             setIsConfirmingDelivery(true);
+            void logAccion('confirmacion', {
+              resultado: 'iniciado',
+              hruta_d,
+              cliente,
+              empresa,
+              tdoc,
+              letra,
+              sucursal,
+              numero,
+              fecha,
+              remito: `${letra}-${sucursal}-${numero}`,
+            });
             try {
               // 1. Verificar si el remito existe
               const existeResponse = await fetch(
@@ -601,6 +644,18 @@ export default function NuevaHojaRutaScreen() {
               if (guardarFechaData?.actualizado) {
                 updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, true);
                 Toast.show({ type: 'success', text1: 'Entrega confirmada correctamente.' });
+                void logAccion('confirmacion', {
+                  resultado: 'ok',
+                  hruta_d,
+                  cliente,
+                  empresa,
+                  tdoc,
+                  letra,
+                  sucursal,
+                  numero,
+                  fecha,
+                  remito: `${letra}-${sucursal}-${numero}`,
+                });
                 await refreshHojaRuta();
                 
                 // 5. Abrir cámara automáticamente para tomar la foto
@@ -616,6 +671,14 @@ export default function NuevaHojaRutaScreen() {
             } catch (error) {
               console.error('Error confirmando entrega:', error);
               setIsConfirmingDelivery(false);
+              void logAccion('confirmacion', {
+                resultado: 'error',
+                hruta_d,
+                cliente,
+                empresa,
+                remito: `${letra}-${sucursal}-${numero}`,
+                error: error instanceof Error ? error.message : String(error),
+              });
               Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
             }
           },
@@ -741,6 +804,19 @@ export default function NuevaHojaRutaScreen() {
     const motivo = rechazarModal.selectedMotivo;
     if (!p || !motivo) return;
     setRechazarModal(v => ({ ...v, visible: false }));
+    void logAccion('rechazo', {
+      resultado: 'iniciado',
+      hruta_d: p.hruta_d,
+      cliente: p.cliente,
+      empresa: p.empresa,
+      tdoc: p.tdoc,
+      letra: p.letra,
+      sucursal: p.sucursal,
+      numero: p.numero,
+      fecha: p.fecha,
+      remito: `${p.letra}-${p.sucursal}-${p.numero}`,
+      motivo_rechazo: motivo,
+    });
     try {
       const rechazarResponse = await fetch(
         'https://gargano-proxy.vercel.app/api/proxy?endpoint=rechazar_remito_app',
@@ -768,12 +844,33 @@ export default function NuevaHojaRutaScreen() {
       if (rechazarData?.rechazado) {
         updateDetalleOptimistically(p.empresa, p.tdoc, p.letra, p.sucursal, p.numero, true);
         Toast.show({ type: 'success', text1: 'Remito rechazado correctamente.' });
+        void logAccion('rechazo', {
+          resultado: 'ok',
+          hruta_d: p.hruta_d,
+          cliente: p.cliente,
+          empresa: p.empresa,
+          remito: `${p.letra}-${p.sucursal}-${p.numero}`,
+          motivo_rechazo: motivo,
+        });
         await refreshHojaRuta();
       } else {
         Toast.show({ type: 'error', text1: 'No se pudo rechazar el remito.' });
+        void logAccion('rechazo', {
+          resultado: 'error',
+          hruta_d: p.hruta_d,
+          remito: `${p.letra}-${p.sucursal}-${p.numero}`,
+          motivo_rechazo: motivo,
+        });
       }
     } catch (error) {
       console.error('Error rechazando remito:', error);
+      void logAccion('rechazo', {
+        resultado: 'error',
+        hruta_d: p.hruta_d,
+        remito: `${p.letra}-${p.sucursal}-${p.numero}`,
+        motivo_rechazo: motivo,
+        error: error instanceof Error ? error.message : String(error),
+      });
       Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
     }
   };
@@ -976,6 +1073,18 @@ export default function NuevaHojaRutaScreen() {
         {
           text: 'Confirmar',
           onPress: async () => {
+            void logAccion('parcial', {
+              resultado: 'iniciado',
+              hruta_d,
+              cliente,
+              empresa,
+              tdoc,
+              letra,
+              sucursal,
+              numero,
+              fecha,
+              remito: `${letra}-${sucursal}-${numero}`,
+            });
             try {
               const parcialResponse = await fetch(
                 'https://gargano-proxy.vercel.app/api/proxy?endpoint=entrega_parcial_remito_app',
@@ -1002,12 +1111,30 @@ export default function NuevaHojaRutaScreen() {
               if (parcialData?.entrega_parcial) {
                 updateDetalleOptimistically(empresa, tdoc, letra, sucursal, numero, true);
                 Toast.show({ type: 'success', text1: 'Entrega parcial registrada correctamente.' });
+                void logAccion('parcial', {
+                  resultado: 'ok',
+                  hruta_d,
+                  cliente,
+                  empresa,
+                  remito: `${letra}-${sucursal}-${numero}`,
+                });
                 await refreshHojaRuta();
               } else {
                 Toast.show({ type: 'error', text1: 'No se pudo registrar la entrega parcial.' });
+                void logAccion('parcial', {
+                  resultado: 'error',
+                  hruta_d,
+                  remito: `${letra}-${sucursal}-${numero}`,
+                });
               }
             } catch (error) {
               console.error('Error registrando entrega parcial:', error);
+              void logAccion('parcial', {
+                resultado: 'error',
+                hruta_d,
+                remito: `${letra}-${sucursal}-${numero}`,
+                error: error instanceof Error ? error.message : String(error),
+              });
               Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
             }
           },
@@ -1029,6 +1156,28 @@ export default function NuevaHojaRutaScreen() {
       chofer,
       cliente,
       remito: `${letra}-${sucursal}-${numero}`,
+    });
+  };
+
+  const openImagenPreview = (det: Record<string, unknown>, remitoLabel: string) => {
+    const url = resolveImagenUrl(det);
+    if (!url) {
+      Toast.show({
+        type: 'error',
+        text1: 'Sin imagen',
+        text2: 'No hay una URL de imagen disponible para este remito.',
+      });
+      return;
+    }
+
+    const pdf = isPdfUrl(url);
+    setImagenModal({
+      visible: true,
+      url,
+      titulo: remitoLabel,
+      isPdf: pdf,
+      loading: !pdf,
+      error: false,
     });
   };
 
@@ -1125,7 +1274,6 @@ export default function NuevaHojaRutaScreen() {
       void fetchHojaRuta(userName, userRol, selectedDate, analistaFilters);
       return;
     }
-    // Filtro local: no requiere nueva llamada al backend.
   };
 
   return (
@@ -1257,11 +1405,15 @@ export default function NuevaHojaRutaScreen() {
                 analistaFilters.pendienteImagen && styles.filterChipActive,
               ]}
               onPress={() => {
-                setAnalistaFilters((prev) => ({
-                  ...prev,
-                  pendienteImagen: !prev.pendienteImagen,
-                }));
+                const nextFilters = {
+                  ...analistaFilters,
+                  pendienteImagen: !analistaFilters.pendienteImagen,
+                };
+                setAnalistaFilters(nextFilters);
                 setExpandedCards(new Set());
+                if (USE_SERVER_ANALISTA_FILTERS) {
+                  void fetchHojaRuta(userName, userRol, selectedDate, nextFilters);
+                }
               }}
             >
               <Ionicons
@@ -1320,12 +1472,20 @@ export default function NuevaHojaRutaScreen() {
                   ? ' (filtro local)'
                   : ''}
               </Text>
-              {hasActiveAnalistaFilters ? (
-                <Pressable onPress={clearAnalistaFilters} style={styles.filterClearButton}>
-                  <Ionicons name="close-circle-outline" size={15} color="#E8A0A0" />
-                  <Text style={styles.filterClearButtonText}>Limpiar</Text>
-                </Pressable>
-              ) : null}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                {USE_SERVER_ANALISTA_FILTERS ? (
+                  <Pressable onPress={applyAnalistaFiltersToServer} style={styles.filterClearButton}>
+                    <Ionicons name="search-outline" size={15} color="#A0C4FF" />
+                    <Text style={[styles.filterClearButtonText, { color: '#A0C4FF' }]}>Buscar</Text>
+                  </Pressable>
+                ) : null}
+                {hasActiveAnalistaFilters ? (
+                  <Pressable onPress={clearAnalistaFilters} style={styles.filterClearButton}>
+                    <Ionicons name="close-circle-outline" size={15} color="#E8A0A0" />
+                    <Text style={styles.filterClearButtonText}>Limpiar</Text>
+                  </Pressable>
+                ) : null}
+              </View>
             </View>
           </View>
         )}
@@ -1488,9 +1648,20 @@ export default function NuevaHojaRutaScreen() {
                               )}
                               {
                                 det.img_estado == 1 && (
-                                  <View style={styles.imagenEstadoRow}>
-                                    <Ionicons name="checkmark-circle-outline" size={13} color="#4BB543" style={{ marginRight: 5 }} />
-                                    <Text style={styles.imagenEstadoText}>Imagen cargada</Text>
+                                  <View style={styles.imagenEstadoWrap}>
+                                    <View style={styles.imagenEstadoRow}>
+                                      <Ionicons name="checkmark-circle-outline" size={13} color="#4BB543" style={{ marginRight: 5 }} />
+                                      <Text style={styles.imagenEstadoText}>Imagen cargada</Text>
+                                    </View>
+                                    {(userRol === 'admin' || userRol === 'analista' || userRol === 'chofer' || userRol === 'trafico') && resolveImagenUrl(det) ? (
+                                      <Pressable
+                                        style={styles.verImagenButton}
+                                        onPress={() => openImagenPreview(det, `${letra}-${sucur}-${numero}`)}
+                                      >
+                                        <Ionicons name="eye-outline" size={13} color="#A0C4FF" />
+                                        <Text style={styles.verImagenButtonText}>Ver imagen</Text>
+                                      </Pressable>
+                                    ) : null}
                                   </View>
                                 )
                               }
@@ -1566,19 +1737,6 @@ export default function NuevaHojaRutaScreen() {
                                       )}
                                     </Pressable>
                                   )}
-                                  {/* {(det.img_path || det.img_archivo) && (
-                                    <Pressable
-                                      style={[styles.partialButton, { marginTop: 8 }]}
-                                      onPress={() => {
-                                        // Aquí puedes abrir un modal o navegar a una pantalla para mostrar la imagen
-                                        // Por ahora solo muestra un toast
-                                        Toast.show({ type: 'info', text1: 'Ver Imagen', text2: 'Funcionalidad pendiente de implementar.' });
-                                      }}
-                                    >
-                                      <Ionicons name="image-outline" size={15} color="#C0D0F5" />
-                                      <Text style={styles.partialButtonText}>Ver Imagen</Text>
-                                    </Pressable>
-                                  )} */}
                                 </View>
                               )}
                             </View>
@@ -1809,6 +1967,92 @@ export default function NuevaHojaRutaScreen() {
       </Modal>
 
       {/* Loader durante confirmación de entrega */}
+      <Modal
+        transparent={true}
+        visible={imagenModal.visible}
+        animationType="fade"
+        onRequestClose={() => setImagenModal(v => ({ ...v, visible: false }))}
+      >
+        <View style={styles.imagenModalOverlay}>
+          <View style={styles.imagenModalContent}>
+            <View style={styles.imagenModalHeader}>
+              <View style={styles.imagenModalTitleWrap}>
+                <Ionicons name="image-outline" size={20} color="#A0C4FF" />
+                <Text style={styles.imagenModalTitle} numberOfLines={1}>
+                  Remito {imagenModal.titulo}
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setImagenModal(v => ({ ...v, visible: false }))}
+                style={styles.imagenModalCloseButton}
+              >
+                <Ionicons name="close" size={22} color="#DCE2F1" />
+              </Pressable>
+            </View>
+
+            <View style={styles.imagenModalBody}>
+              {imagenModal.isPdf ? (
+                <View style={styles.imagenModalPdfBox}>
+                  <Ionicons name="document-text-outline" size={42} color="#A0C4FF" />
+                  <Text style={styles.imagenModalPdfText}>
+                    El archivo cargado es un PDF. Podés abrirlo fuera de la app.
+                  </Text>
+                  <Pressable
+                    style={styles.imagenModalOpenButton}
+                    onPress={async () => {
+                      try {
+                        await Linking.openURL(imagenModal.url);
+                      } catch {
+                        Toast.show({ type: 'error', text1: 'No se pudo abrir el archivo' });
+                      }
+                    }}
+                  >
+                    <Ionicons name="open-outline" size={16} color="#F2F5FB" />
+                    <Text style={styles.imagenModalOpenButtonText}>Abrir PDF</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <>
+                  {imagenModal.loading ? (
+                    <ActivityIndicator size="large" color="#926FA9" style={styles.imagenModalLoader} />
+                  ) : null}
+                  {imagenModal.error ? (
+                    <View style={styles.imagenModalPdfBox}>
+                      <Ionicons name="alert-circle-outline" size={36} color="#E25B5B" />
+                      <Text style={styles.imagenModalPdfText}>
+                        No se pudo cargar la previsualización.
+                      </Text>
+                      <Pressable
+                        style={styles.imagenModalOpenButton}
+                        onPress={async () => {
+                          try {
+                            await Linking.openURL(imagenModal.url);
+                          } catch {
+                            Toast.show({ type: 'error', text1: 'No se pudo abrir la imagen' });
+                          }
+                        }}
+                      >
+                        <Ionicons name="open-outline" size={16} color="#F2F5FB" />
+                        <Text style={styles.imagenModalOpenButtonText}>Abrir en navegador</Text>
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Image
+                      source={{ uri: imagenModal.url }}
+                      style={styles.imagenModalImage}
+                      contentFit="contain"
+                      onLoadStart={() => setImagenModal(v => ({ ...v, loading: true, error: false }))}
+                      onLoad={() => setImagenModal(v => ({ ...v, loading: false, error: false }))}
+                      onError={() => setImagenModal(v => ({ ...v, loading: false, error: true }))}
+                    />
+                  )}
+                </>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {isConfirmingDelivery && (
         <View style={styles.loaderOverlay}>
           <View style={styles.loaderContainer}>
@@ -1823,6 +2067,14 @@ export default function NuevaHojaRutaScreen() {
 }
 
 const styles = StyleSheet.create({
+    imagenEstadoWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginTop: 4,
+      marginBottom: 2,
+    },
     imagenEstadoRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1830,8 +2082,6 @@ const styles = StyleSheet.create({
       borderRadius: 6,
       paddingHorizontal: 8,
       paddingVertical: 2,
-      marginTop: 4,
-      marginBottom: 2,
       alignSelf: 'flex-start',
     },
     imagenEstadoText: {
@@ -1839,6 +2089,108 @@ const styles = StyleSheet.create({
       fontWeight: 'bold',
       fontSize: 13,
       marginLeft: 2,
+    },
+    verImagenButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: '#3A5080',
+      backgroundColor: '#1A2540',
+    },
+    verImagenButtonText: {
+      color: '#A0C4FF',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    imagenModalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.82)',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+    },
+    imagenModalContent: {
+      backgroundColor: '#121826',
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: '#2A3847',
+      overflow: 'hidden',
+      maxHeight: '85%',
+    },
+    imagenModalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: '#1E2D45',
+    },
+    imagenModalTitleWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flex: 1,
+      marginRight: 8,
+    },
+    imagenModalTitle: {
+      color: '#E8ECF7',
+      fontSize: 15,
+      fontWeight: '700',
+      flex: 1,
+    },
+    imagenModalCloseButton: {
+      width: 34,
+      height: 34,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#1A2540',
+    },
+    imagenModalBody: {
+      minHeight: 280,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 12,
+    },
+    imagenModalImage: {
+      width: '100%',
+      height: Dimensions.get('window').height * 0.55,
+      borderRadius: 8,
+    },
+    imagenModalLoader: {
+      position: 'absolute',
+      zIndex: 2,
+    },
+    imagenModalPdfBox: {
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 24,
+      paddingHorizontal: 16,
+    },
+    imagenModalPdfText: {
+      color: '#B0BAD0',
+      fontSize: 14,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    imagenModalOpenButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      borderRadius: 8,
+      backgroundColor: '#3A5080',
+    },
+    imagenModalOpenButtonText: {
+      color: '#F2F5FB',
+      fontSize: 14,
+      fontWeight: '700',
     },
   safeArea: {
     flex: 1,

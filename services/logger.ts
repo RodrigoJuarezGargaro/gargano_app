@@ -5,12 +5,13 @@ import { Platform } from 'react-native';
 const API_BASE_URL = 'https://gargano-proxy.vercel.app/api/proxy?endpoint=';
 const APP_VERSION = '1.0.3'; // Sincronizado con app.config.js
 
-type LogType = 'login' | 'logout' | 'error' | 'info' | 'warning';
+type LogType = 'login' | 'logout' | 'error' | 'info' | 'warning' | 'accion';
 
 interface LogParams {
   tipo: LogType;
   pantalla: string;
   detalles?: string;
+  username?: string | null;
 }
 
 /**
@@ -39,6 +40,45 @@ async function getUserId(): Promise<number | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * Obtiene el username/login del usuario actual
+ */
+async function getUsername(explicit?: string | null): Promise<string | null> {
+  const fromParam = typeof explicit === 'string' ? explicit.trim() : '';
+  if (fromParam) {
+    return fromParam;
+  }
+
+  try {
+    const storedName = (await AsyncStorage.getItem('nombre_usuario'))?.trim();
+    if (storedName) {
+      return storedName;
+    }
+
+    const sessionRaw = await AsyncStorage.getItem('userSession');
+    if (sessionRaw) {
+      const session = JSON.parse(sessionRaw) as Record<string, unknown>;
+      const login = String(session.login ?? session.nombre_usuario ?? session.nombre ?? '').trim();
+      if (login) {
+        return login;
+      }
+    }
+
+    const typedSessionRaw = await AsyncStorage.getItem('@gargano/session');
+    if (typedSessionRaw) {
+      const typedSession = JSON.parse(typedSessionRaw) as Record<string, unknown>;
+      const login = String(typedSession.login ?? typedSession.nombre ?? '').trim();
+      if (login) {
+        return login;
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
 }
 
 /**
@@ -71,12 +111,14 @@ function getPlatform(): string {
 export async function logEvent(params: LogParams): Promise<void> {
   try {
     const userId = await getUserId();
+    const username = await getUsername(params.username);
     const sessionId = await getSessionId();
     const deviceId = getDeviceId();
     const platform = getPlatform();
 
     const logData = {
       id_user: userId,
+      username,
       id_dispositivo: deviceId,
       id_session: sessionId,
       tipo: params.tipo,
@@ -85,7 +127,7 @@ export async function logEvent(params: LogParams): Promise<void> {
       version_app: APP_VERSION,
       detalles: params.detalles || null,
     };
-    console.log('[Logger] Enviando log:', params.tipo, params.pantalla);
+    console.log('[Logger] Enviando log:', params.tipo, params.pantalla, username);
 
     // NOTA: El logger NO usa autenticación porque necesitamos logs
     // incluso cuando no hay sesión activa (errores de login, etc.)
@@ -114,6 +156,7 @@ export async function logLogin(email: string): Promise<void> {
   await logEvent({
     tipo: 'login',
     pantalla: 'Login',
+    username: email,
     detalles: `Usuario ${email} inició sesión correctamente`,
   });
 }
@@ -123,10 +166,13 @@ export async function logLogin(email: string): Promise<void> {
  */
 export async function logLogout(reason?: string): Promise<void> {
   const userId = await getUserId();
+  const username = await getUsername();
+  const quien = username || (userId !== null ? `ID ${userId}` : 'desconocido');
   await logEvent({
     tipo: 'logout',
     pantalla: 'Session',
-    detalles: reason || `Usuario ID ${userId} cerró sesión`,
+    username,
+    detalles: reason || `${quien} cerró sesión`,
   });
 }
 
@@ -172,5 +218,19 @@ export async function logInfo(pantalla: string, mensaje: string): Promise<void> 
     tipo: 'info',
     pantalla,
     detalles: mensaje,
+  });
+}
+
+/**
+ * Log de acciones de entrega (confirmación, rechazo, parcial, etc.)
+ */
+export async function logAccion(
+  accion: 'confirmacion' | 'rechazo' | 'parcial' | 'anular',
+  detalles: Record<string, unknown>,
+): Promise<void> {
+  await logEvent({
+    tipo: 'accion',
+    pantalla: 'NuevaHojaRuta',
+    detalles: JSON.stringify({ accion, ...detalles }).substring(0, 5000),
   });
 }

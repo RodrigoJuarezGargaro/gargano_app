@@ -28,6 +28,12 @@ export default function DrawerLayout() {
             drawerLabel: 'Ubicación en Tiempo Real',
           }}
         />
+        <Drawer.Screen
+          name="estado_app"
+          options={{
+            drawerLabel: 'Ver estado de la app',
+          }}
+        />
       </Drawer>
     </GestureHandlerRootView>
   );

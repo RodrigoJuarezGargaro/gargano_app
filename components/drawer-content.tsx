@@ -80,6 +80,14 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
             <Text style={styles.navItemText}>Ubicación en Tiempo Real</Text>
           </Pressable>
         )}
+
+        <Pressable
+          style={({ pressed }) => [styles.navItem, pressed && styles.navItemPressed]}
+          onPress={() => navigation.navigate('estado_app')}
+        >
+          <Ionicons name="pulse-outline" size={20} color="#6FD78C" />
+          <Text style={styles.navItemText}>Ver estado de la app</Text>
+        </Pressable>
       </View>
 
       {/* Cerrar sesión */}
