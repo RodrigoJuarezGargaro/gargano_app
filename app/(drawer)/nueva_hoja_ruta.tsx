@@ -2144,6 +2144,18 @@ export default function NuevaHojaRutaScreen() {
           </View>
         </View>
       )}
+
+      {!isConfirmingDelivery && isLoadingRoutes && (
+        <View style={styles.loaderOverlay}>
+          <View style={styles.loaderContainer}>
+            <ActivityIndicator size="large" color="#926FA9" />
+            <Text style={styles.loaderText}>Buscando hojas de ruta...</Text>
+            <Text style={styles.loaderSubtext}>
+              {userRol === 'analista' ? 'Aplicando filtros' : 'Cargando resultados'}
+            </Text>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
