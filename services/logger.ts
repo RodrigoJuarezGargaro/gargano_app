@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
-const API_BASE_URL = 'https://gargano-proxy.vercel.app/api/proxy?endpoint=';
+const API_BASE_URL = 'https://www.gargano.com.ar/laravel_backend_app/public/api/';
 const APP_VERSION = require('../app.config.js').version;
 
 type LogType = 'login' | 'logout' | 'error' | 'info' | 'warning' | 'accion';
@@ -221,7 +221,7 @@ export async function logInfo(pantalla: string, mensaje: string): Promise<void> 
  * Log de acciones de entrega (confirmación, rechazo, parcial, etc.)
  */
 export async function logAccion(
-  accion: 'confirmacion' | 'rechazo' | 'parcial' | 'anular' | 'health',
+  accion: 'confirmacion' | 'rechazo' | 'parcial' | 'anular' | 'health' | 'filtro' | 'imagen',
   detalles: Record<string, unknown>,
   pantalla = 'NuevaHojaRuta',
 ): Promise<void> {

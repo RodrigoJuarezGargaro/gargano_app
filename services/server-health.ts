@@ -3,7 +3,7 @@
  * Utiliza el endpoint de health check para detectar si el servidor está caído
  */
 
-const API_BASE_URL = 'https://gargano-proxy.vercel.app/api/proxy?endpoint=';
+const API_BASE_URL = 'https://www.gargano.com.ar/laravel_backend_app/public/api/';
 const HEALTH_CHECK_TIMEOUT = 10000; // 10 segundos de timeout
 
 export interface ServerHealthStatus {

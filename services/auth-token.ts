@@ -149,7 +149,7 @@ export async function authenticatedFetch(
   endpoint: string,
   options: RequestInit = {},
 ): Promise<Response> {
-  const API_BASE_URL = 'https://gargano-proxy.vercel.app/api/proxy?endpoint=';
+  const API_BASE_URL = 'https://www.gargano.com.ar/laravel_backend_app/public/api/';
   const authHeaders = await getAuthHeaders();
 
   const response = await fetch(API_BASE_URL + endpoint, {

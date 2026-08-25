@@ -58,6 +58,25 @@ const emptyAnalistaFilters = (): AnalistaFilters => ({
   remito: '',
 });
 
+const hasAnyAnalistaFilter = (filters: AnalistaFilters) =>
+  filters.pendienteImagen ||
+  Boolean(filters.hruta.trim()) ||
+  Boolean(filters.remito.trim());
+
+const logFiltroAnalista = (
+  resultado: 'aplicado' | 'limpiado',
+  fecha: Date,
+  filters: AnalistaFilters,
+) => {
+  void logAccion('filtro', {
+    resultado,
+    fecha: formatDateLocal(fecha),
+    pendiente_imagen: filters.pendienteImagen,
+    hruta_d: filters.hruta.trim() || null,
+    remito: filters.remito.trim() || null,
+  });
+};
+
 const normalizeSearch = (value: string) =>
   value.trim().toLowerCase().replace(/\s+/g, '');
 
@@ -339,9 +358,7 @@ export default function NuevaHojaRutaScreen() {
           const formattedDate = formatDateLocal(dateToUse);
           const activeFilters = filters ?? analistaFiltersRef.current;
 
-          // Query params aparte del endpoint (el proxy los reenvía a Laravel).
           const query = new URLSearchParams();
-          query.set('endpoint', `obtener_hoja_ruta_por_fecha/${formattedDate}`);
           if (USE_SERVER_ANALISTA_FILTERS) {
             if (activeFilters.pendienteImagen) {
               query.set('pendiente_imagen', '1');
@@ -353,14 +370,15 @@ export default function NuevaHojaRutaScreen() {
               query.set('remito', activeFilters.remito.trim());
             }
           }
+          const qs = query.toString();
+          const url =
+            `https://www.gargano.com.ar/laravel_backend_app/public/api/obtener_hoja_ruta_por_fecha/${formattedDate}` +
+            (qs ? `?${qs}` : '');
 
-          response = await fetch(
-            `https://gargano-proxy.vercel.app/api/proxy?${query.toString()}`,
-            { method: 'GET', signal: controller.signal }
-          );
+          response = await fetch(url, { method: 'GET', signal: controller.signal });
         } else if (rol === 'admin' || rol === 'trafico') {
           response = await fetch(
-            'https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_hoja_ruta_diaria',
+            'https://www.gargano.com.ar/laravel_backend_app/public/api/obtener_hoja_ruta_diaria',
             { method: 'GET', signal: controller.signal }
           );
         } else {
@@ -371,7 +389,7 @@ export default function NuevaHojaRutaScreen() {
             return;
           }
           response = await fetch(
-            `https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_hoja_ruta/${encodeURIComponent(cleanName)}`,
+            `https://www.gargano.com.ar/laravel_backend_app/public/api/obtener_hoja_ruta/${encodeURIComponent(cleanName)}`,
             { signal: controller.signal }
           );
         }
@@ -440,7 +458,7 @@ export default function NuevaHojaRutaScreen() {
     const promesas = Array.from(choferesUnicos).map(async (chofer) => {
       try {
         const response = await fetch(
-          `https://gargano-proxy.vercel.app/api/proxy?endpoint=verificar_token_notificacion/${encodeURIComponent(chofer)}`,
+          `https://www.gargano.com.ar/laravel_backend_app/public/api/verificar_token_notificacion/${encodeURIComponent(chofer)}`,
           { method: 'GET' }
         );
         
@@ -533,7 +551,7 @@ export default function NuevaHojaRutaScreen() {
             try {
               // 1. Verificar si el remito existe
               const existeResponse = await fetch(
-                'https://gargano-proxy.vercel.app/api/proxy?endpoint=existe_hoja_ruta_rem_cab_app',
+                'https://www.gargano.com.ar/laravel_backend_app/public/api/existe_hoja_ruta_rem_cab_app',
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -558,7 +576,7 @@ export default function NuevaHojaRutaScreen() {
               if (!existeData?.existe) {
                 // 2. Si no existe, insertar
                 const insertarResponse = await fetch(
-                  'https://gargano-proxy.vercel.app/api/proxy?endpoint=insertar_remito_app',
+                  'https://www.gargano.com.ar/laravel_backend_app/public/api/insertar_remito_app',
                   {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -590,7 +608,7 @@ export default function NuevaHojaRutaScreen() {
               } else {
                 // 3. Si existe, actualizar
                 const actualizarResponse = await fetch(
-                  'https://gargano-proxy.vercel.app/api/proxy?endpoint=actualizar_remito_app_fecha_actual',
+                  'https://www.gargano.com.ar/laravel_backend_app/public/api/actualizar_remito_app_fecha_actual',
                   {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -621,7 +639,7 @@ export default function NuevaHojaRutaScreen() {
 
               // 4. Paso final: guardar fecha de entrega
               const guardarFechaResponse = await fetch(
-                'https://gargano-proxy.vercel.app/api/proxy?endpoint=guardar_fecha_entrega_remito_app',
+                'https://www.gargano.com.ar/laravel_backend_app/public/api/guardar_fecha_entrega_remito_app',
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -711,7 +729,7 @@ export default function NuevaHojaRutaScreen() {
           onPress: async () => {
             try {
               const anularResponse = await fetch(
-                'https://gargano-proxy.vercel.app/api/proxy?endpoint=anular_remito_app',
+                'https://www.gargano.com.ar/laravel_backend_app/public/api/anular_remito_app',
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -761,7 +779,7 @@ export default function NuevaHojaRutaScreen() {
     setIsLoadingMotivos(true);
     try {
       const response = await fetch(
-        'https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_estados_remito_cabecera/rechazo',
+        'https://www.gargano.com.ar/laravel_backend_app/public/api/obtener_estados_remito_cabecera/rechazo',
         { method: 'GET' }
       );
       if (!response.ok) {
@@ -819,7 +837,7 @@ export default function NuevaHojaRutaScreen() {
     });
     try {
       const rechazarResponse = await fetch(
-        'https://gargano-proxy.vercel.app/api/proxy?endpoint=rechazar_remito_app',
+        'https://www.gargano.com.ar/laravel_backend_app/public/api/rechazar_remito_app',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -873,6 +891,35 @@ export default function NuevaHojaRutaScreen() {
       });
       Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor.' });
     }
+  };
+
+  const handleReplaceImage = (
+    empresa: string,
+    tdoc: string,
+    letra: string,
+    sucur: string,
+    numero: string,
+  ) => {
+    Alert.alert(
+      'Reemplazar imagen',
+      'Ya hay una imagen cargada. ¿Querés sacar otra foto y reemplazarla?',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Reemplazar',
+          onPress: () => {
+            void logAccion('imagen', {
+              resultado: 'reemplazo_iniciado',
+              remito: `${letra}-${sucur}-${numero}`,
+              empresa,
+              tdoc,
+            });
+            // Reutilizamos el flujo de cámara/validación/guardado existente.
+            void handleTakePhoto(empresa, tdoc, letra, sucur, numero);
+          },
+        },
+      ],
+    );
   };
 
   const handleTakePhoto = async (empresa: string, tdoc: string, letra: string, sucur: string, numero: string) => {
@@ -967,7 +1014,7 @@ export default function NuevaHojaRutaScreen() {
 
       try {
         const response = await fetch(
-          'https://gargano-proxy.vercel.app/api/proxy?endpoint=guardar_imagen_remito_app',
+          'https://www.gargano.com.ar/laravel_backend_app/public/api/guardar_imagen_remito_app',
           { method: 'POST', body: formData }
         );
         const data = await response.json();
@@ -976,6 +1023,13 @@ export default function NuevaHojaRutaScreen() {
           return;
         }
         Alert.alert('Éxito', 'Imagen guardada correctamente.');
+        void refreshHojaRuta();
+        void logAccion('imagen', {
+          resultado: 'guardada',
+          remito: `${letra}-${sucur}-${numero}`,
+          empresa,
+          tdoc,
+        });
       } catch (error) {
         console.error('Error guardando imagen:', error);
         await logError('NuevaHojaRuta', 'guardar_imagen_remito_app', {
@@ -994,7 +1048,7 @@ export default function NuevaHojaRutaScreen() {
       validarFormData.append('imagen', imagePayload);
 
       const validarResponse = await fetch(
-        'https://gargano-proxy.vercel.app/api/proxy?endpoint=validar_imagen_remito_app',
+        'https://www.gargano.com.ar/laravel_backend_app/public/api/validar_imagen_remito_app',
         { method: 'POST', body: validarFormData }
       );
       const validarData = await validarResponse.json();
@@ -1087,7 +1141,7 @@ export default function NuevaHojaRutaScreen() {
             });
             try {
               const parcialResponse = await fetch(
-                'https://gargano-proxy.vercel.app/api/proxy?endpoint=entrega_parcial_remito_app',
+                'https://www.gargano.com.ar/laravel_backend_app/public/api/entrega_parcial_remito_app',
                 {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -1195,7 +1249,7 @@ export default function NuevaHojaRutaScreen() {
 
     try {
       const response = await fetch(
-        'https://gargano-proxy.vercel.app/api/proxy?endpoint=enviar_notificacion_chofer',
+        'https://www.gargano.com.ar/laravel_backend_app/public/api/enviar_notificacion_chofer',
         {
           method: 'POST',
           headers: {
@@ -1263,6 +1317,7 @@ export default function NuevaHojaRutaScreen() {
     const cleared = emptyAnalistaFilters();
     setAnalistaFilters(cleared);
     setExpandedCards(new Set());
+    logFiltroAnalista('limpiado', selectedDate, analistaFilters);
     if (USE_SERVER_ANALISTA_FILTERS && userRol === 'analista') {
       void fetchHojaRuta(userName, userRol, selectedDate, cleared);
     }
@@ -1270,6 +1325,9 @@ export default function NuevaHojaRutaScreen() {
 
   const applyAnalistaFiltersToServer = () => {
     setExpandedCards(new Set());
+    if (userRol === 'analista' && hasAnyAnalistaFilter(analistaFilters)) {
+      logFiltroAnalista('aplicado', selectedDate, analistaFilters);
+    }
     if (USE_SERVER_ANALISTA_FILTERS && userRol === 'analista') {
       void fetchHojaRuta(userName, userRol, selectedDate, analistaFilters);
       return;
@@ -1411,6 +1469,11 @@ export default function NuevaHojaRutaScreen() {
                 };
                 setAnalistaFilters(nextFilters);
                 setExpandedCards(new Set());
+                if (hasAnyAnalistaFilter(nextFilters)) {
+                  logFiltroAnalista('aplicado', selectedDate, nextFilters);
+                } else {
+                  logFiltroAnalista('limpiado', selectedDate, analistaFilters);
+                }
                 if (USE_SERVER_ANALISTA_FILTERS) {
                   void fetchHojaRuta(userName, userRol, selectedDate, nextFilters);
                 }
@@ -1660,6 +1723,25 @@ export default function NuevaHojaRutaScreen() {
                                       >
                                         <Ionicons name="eye-outline" size={13} color="#A0C4FF" />
                                         <Text style={styles.verImagenButtonText}>Ver imagen</Text>
+                                      </Pressable>
+                                    ) : null}
+                                    {userRol === 'analista' ? (
+                                      <Pressable
+                                        style={styles.reemplazarImagenButton}
+                                        disabled={uploadingKey !== null}
+                                        onPress={() =>
+                                          uploadingKey === null &&
+                                          handleReplaceImage(empresa, tdoc, letra, sucur, numero)
+                                        }
+                                      >
+                                        {uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` ? (
+                                          <ActivityIndicator size="small" color="#F0D9A0" />
+                                        ) : (
+                                          <>
+                                            <Ionicons name="camera-reverse-outline" size={13} color="#F0D9A0" />
+                                            <Text style={styles.reemplazarImagenButtonText}>Reemplazar imagen</Text>
+                                          </>
+                                        )}
                                       </Pressable>
                                     ) : null}
                                   </View>
@@ -2103,6 +2185,22 @@ const styles = StyleSheet.create({
     },
     verImagenButtonText: {
       color: '#A0C4FF',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    reemplazarImagenButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: '#6A5530',
+      backgroundColor: '#2A2214',
+    },
+    reemplazarImagenButtonText: {
+      color: '#F0D9A0',
       fontSize: 12,
       fontWeight: '600',
     },

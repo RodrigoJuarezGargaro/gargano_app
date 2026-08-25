@@ -39,8 +39,7 @@ import {
   saveUserSessionFromResponse,
 } from '@/services/session-storage';
 
-// Proxy en Vercel que soluciona el problema de certificado SSL incompleto de gargano.com.ar
-const API_BASE_URL = 'https://gargano-proxy.vercel.app/api/proxy?endpoint=';
+const API_BASE_URL = 'https://www.gargano.com.ar/laravel_backend_app/public/api/';
 
 
 export default function HomeScreen() {
@@ -203,8 +202,8 @@ export default function HomeScreen() {
   }, [router]);
 
   const handleLogin = async () => {
-    console.log('Intentando login con token via Proxy Vercel...');
-    console.log('URL del Proxy:', API_BASE_URL + 'login_token');
+    console.log('Intentando login con token...');
+    console.log('URL API:', API_BASE_URL + 'login_token');
     setIsLoggingIn(true);
     try {
       const response = await fetch(API_BASE_URL + 'login_token', {
@@ -233,7 +232,7 @@ export default function HomeScreen() {
       }
       await offerBiometricActivation();
     } catch (error) {
-      console.error('Error de red en el Proxy:', error);
+      console.error('Error de red en la API:', error);
       
       // Log del error
       await logError('Login', 'login_token', {
@@ -249,7 +248,7 @@ export default function HomeScreen() {
         setShowServerDownModal(true);
       } else {
         // Error de conexión del usuario
-        Toast.show({ type: 'error', text1: 'No se pudo conectar con el proxy. Verifica tu conexion a internet.' });
+        Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor. Verifica tu conexion a internet.' });
       }
     } finally {
       setIsLoggingIn(false);

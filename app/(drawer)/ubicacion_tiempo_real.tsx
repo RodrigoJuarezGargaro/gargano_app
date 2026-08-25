@@ -95,7 +95,7 @@ export default function UbicacionTiempoRealScreen() {
 
       // Obtener ubicaciones de TODOS los choferes activos
       const response = await fetch(
-        'https://gargano-proxy.vercel.app/api/proxy?endpoint=obtener_ubicaciones_todos_choferes',
+        'https://www.gargano.com.ar/laravel_backend_app/public/api/obtener_ubicaciones_todos_choferes',
         {
           method: 'GET',
           headers: {

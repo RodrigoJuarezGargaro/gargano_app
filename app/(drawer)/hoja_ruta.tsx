@@ -13,7 +13,7 @@ import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
-const API_BASE_URL = 'https://gargano-proxy.vercel.app/api/proxy?endpoint=';
+const API_BASE_URL = 'https://www.gargano.com.ar/laravel_backend_app/public/api/';
 
 export default function HojaRutaScreen() {
   const router = useRouter();

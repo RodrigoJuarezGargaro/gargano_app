@@ -143,7 +143,7 @@ async function sendLocationToServer(userName: string, location: LocationUpdate):
     const timeoutId = setTimeout(() => controller.abort(), 10000);
     
     const response = await fetch(
-      'https://gargano-proxy.vercel.app/api/proxy?endpoint=guardar_ubicacion_chofer',
+      'https://www.gargano.com.ar/laravel_backend_app/public/api/guardar_ubicacion_chofer',
       {
         method: 'POST',
         headers: {
