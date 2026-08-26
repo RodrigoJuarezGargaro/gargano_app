@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
@@ -39,6 +40,7 @@ import {
   saveUserSessionFromResponse,
 } from '@/services/session-storage';
 
+const APP_VERSION = Constants.expoConfig?.version ?? '1.0.0';
 const API_BASE_URL = 'https://www.gargano.com.ar/laravel_backend_app/public/api/';
 
 
@@ -381,6 +383,8 @@ export default function HomeScreen() {
               </>
             ) : null}
           </View>
+
+          <Text style={styles.versionText}>Versión {APP_VERSION}</Text>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -488,6 +492,12 @@ const styles = StyleSheet.create({
   },
   formBlock: {
     marginTop: 0,
+  },
+  versionText: {
+    marginTop: 28,
+    color: '#6A7A96',
+    fontSize: 12,
+    textAlign: 'center',
   },
   title: {
     color: '#E5E9F5',

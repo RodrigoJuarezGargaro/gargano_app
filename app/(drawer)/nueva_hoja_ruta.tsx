@@ -12,7 +12,7 @@ import * as Location from 'expo-location';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Dimensions, InteractionManager, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -914,19 +914,22 @@ export default function NuevaHojaRutaScreen() {
               empresa,
               tdoc,
             });
-            // Reutilizamos el flujo de cámara/validación/guardado existente.
-            void handleTakePhoto(empresa, tdoc, letra, sucur, numero);
+            // Esperar a que cierre el Alert antes de abrir cámara/GPS (Android).
+            InteractionManager.runAfterInteractions(() => {
+              setTimeout(() => {
+                void handleTakePhoto(empresa, tdoc, letra, sucur, numero);
+              }, 350);
+            });
           },
         },
       ],
     );
   };
 
-  const handleTakePhoto = async (empresa: string, tdoc: string, letra: string, sucur: string, numero: string) => {
+  const resolveLocationForUpload = async () => {
     const { status: locationStatus } = await Location.requestForegroundPermissionsAsync();
     if (locationStatus !== 'granted') {
-      Alert.alert('Permiso de ubicación requerido', 'Se necesita permiso de ubicación para sacar la foto. Por favor, habilítalo en la configuración.');
-      return;
+      return { coords: null, place: null, permissionDenied: true as const };
     }
 
     const coords = await fetchLocation();
@@ -946,7 +949,11 @@ export default function NuevaHojaRutaScreen() {
     } else {
       console.warn('[handleTakePhoto] No se pudo obtener la ubicación.');
     }
-    
+
+    return { coords, place, permissionDenied: false as const };
+  };
+
+  const handleTakePhoto = async (empresa: string, tdoc: string, letra: string, sucur: string, numero: string) => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permiso denegado', 'Se necesita permiso para acceder a la cámara.');
@@ -978,13 +985,70 @@ export default function NuevaHojaRutaScreen() {
     const key = `${empresa}-${letra}-${sucur}-${numero}`;
     setUploadingKey(key);
 
-    const imagePayload = {
+    const imageMeta = {
       uri: asset.uri,
       type: asset.mimeType ?? 'image/jpeg',
       name: `foto_${letra}-${sucur}-${numero}.jpg`,
-    } as unknown as Blob;
+    };
+
+    const imagePayload = imageMeta as unknown as Blob;
 
     const guardarImagen = async () => {
+      const { coords, place, permissionDenied } = await resolveLocationForUpload();
+      if (permissionDenied) {
+        setUploadingKey(null);
+        Alert.alert(
+          'Permiso de ubicación requerido',
+          'Se necesita permiso de ubicación para guardar la foto con coordenadas GPS.',
+        );
+        return;
+      }
+
+      const coordenadasPayload = coords
+        ? {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            accuracy: coords.accuracy,
+          }
+        : null;
+
+      const ubicacionPayload = place
+        ? {
+            ciudad: place.city ?? null,
+            localidad: place.district ?? null,
+            provincia: place.region ?? null,
+            pais: place.country ?? null,
+            calle: place.street ?? null,
+            numero: place.streetNumber ?? null,
+            codigoPostal: place.postalCode ?? null,
+          }
+        : null;
+
+      const payloadLog = {
+        endpoint: 'guardar_imagen_remito_app',
+        empresa,
+        tdoc,
+        letra,
+        sucur,
+        numero,
+        usuario: userName,
+        coordenadas: coordenadasPayload,
+        ubicacion: ubicacionPayload,
+        imagen: {
+          name: imageMeta.name,
+          type: imageMeta.type,
+          fileSize: asset.fileSize ?? null,
+          width: asset.width ?? null,
+          height: asset.height ?? null,
+        },
+      };
+
+      void logAccion('imagen', {
+        resultado: 'payload_enviado',
+        remito: `${letra}-${sucur}-${numero}`,
+        payload: payloadLog,
+      });
+
       const formData = new FormData();
       formData.append('empresa', empresa);
       formData.append('tdoc', tdoc);
@@ -993,23 +1057,11 @@ export default function NuevaHojaRutaScreen() {
       formData.append('numero', numero);
       formData.append('imagen', imagePayload);
       formData.append('usuario', userName);
-      if (coords) {
-        formData.append('coordenadas', JSON.stringify({
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          accuracy: coords.accuracy,
-        }));
+      if (coordenadasPayload) {
+        formData.append('coordenadas', JSON.stringify(coordenadasPayload));
       }
-      if (place) {
-        formData.append('ubicacion', JSON.stringify({
-          ciudad:       place.city          ?? null,
-          localidad:    place.district      ?? null,
-          provincia:    place.region        ?? null,
-          pais:         place.country       ?? null,
-          calle:        place.street        ?? null,
-          numero:       place.streetNumber  ?? null,
-          codigoPostal: place.postalCode    ?? null,
-        }));
+      if (ubicacionPayload) {
+        formData.append('ubicacion', JSON.stringify(ubicacionPayload));
       }
 
       try {
@@ -1019,6 +1071,13 @@ export default function NuevaHojaRutaScreen() {
         );
         const data = await response.json();
         if (!response.ok) {
+          void logAccion('imagen', {
+            resultado: 'error_respuesta',
+            remito: `${letra}-${sucur}-${numero}`,
+            status: response.status,
+            payload: payloadLog,
+            respuesta: data,
+          });
           Alert.alert('Error', data?.error ? JSON.stringify(data.error) : 'No se pudo guardar la imagen.');
           return;
         }
@@ -1027,14 +1086,22 @@ export default function NuevaHojaRutaScreen() {
         void logAccion('imagen', {
           resultado: 'guardada',
           remito: `${letra}-${sucur}-${numero}`,
-          empresa,
-          tdoc,
+          status: response.status,
+          payload: payloadLog,
+          respuesta: data,
         });
       } catch (error) {
         console.error('Error guardando imagen:', error);
+        void logAccion('imagen', {
+          resultado: 'error_red',
+          remito: `${letra}-${sucur}-${numero}`,
+          payload: payloadLog,
+          error: error instanceof Error ? error.message : String(error),
+        });
         await logError('NuevaHojaRuta', 'guardar_imagen_remito_app', {
           error: error instanceof Error ? error.message : String(error),
           remito: `${empresa}-${tdoc}-${letra}-${sucur}-${numero}`,
+          payload: payloadLog,
         });
         Alert.alert('Error', 'No se pudo conectar con el servidor.');
       } finally {
@@ -1528,9 +1595,7 @@ export default function NuevaHojaRutaScreen() {
 
             <View style={styles.filterActionsRow}>
               <Text style={styles.filterResultCount}>
-                {isLoadingRoutes
-                  ? 'Buscando...'
-                  : `${rutasVisibles.length} HR${rutasVisibles.length === 1 ? '' : 's'}`}
+                {`${rutasVisibles.length} HR${rutasVisibles.length === 1 ? '' : 's'}`}
                 {hasActiveAnalistaFilters && !USE_SERVER_ANALISTA_FILTERS
                   ? ' (filtro local)'
                   : ''}
@@ -1554,15 +1619,13 @@ export default function NuevaHojaRutaScreen() {
         )}
 
         <View style={styles.sectionBlock}>
-          <Text style={styles.sectionTitle}>
-            {isLoadingRoutes ? 'Cargando hojas de ruta...' : 'Hojas de ruta'}
-          </Text>
+          <Text style={styles.sectionTitle}>Hojas de ruta</Text>
 
           {rutasVisibles.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>
                 {isLoadingRoutes
-                  ? 'Obteniendo rutas...'
+                  ? 'Cargando información'
                   : hasActiveAnalistaFilters
                     ? 'Sin resultados para los filtros aplicados'
                     : 'Sin hojas de ruta asignadas'}
@@ -2141,18 +2204,6 @@ export default function NuevaHojaRutaScreen() {
             <ActivityIndicator size="large" color="#926FA9" />
             <Text style={styles.loaderText}>Procesando entrega...</Text>
             <Text style={styles.loaderSubtext}>Abriendo cámara al finalizar</Text>
-          </View>
-        </View>
-      )}
-
-      {!isConfirmingDelivery && isLoadingRoutes && (
-        <View style={styles.loaderOverlay}>
-          <View style={styles.loaderContainer}>
-            <ActivityIndicator size="large" color="#926FA9" />
-            <Text style={styles.loaderText}>Buscando hojas de ruta...</Text>
-            <Text style={styles.loaderSubtext}>
-              {userRol === 'analista' ? 'Aplicando filtros' : 'Cargando resultados'}
-            </Text>
           </View>
         </View>
       )}
