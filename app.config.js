@@ -2,7 +2,7 @@ module.exports = {
   expo: {
     name: "Gargano Logistica",
     slug: "gargano-logistica",
-    version: "1.0.8",
+    version: "1.0.9",
     orientation: "portrait",
     icon: "./assets/images/new_icon.png",
     scheme: "garganomobile",
