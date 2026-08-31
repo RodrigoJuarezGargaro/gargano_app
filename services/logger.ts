@@ -110,7 +110,7 @@ export async function logEvent(params: LogParams): Promise<void> {
     const sessionId = await getSessionId();
     const deviceId = getDeviceId();
     const platform = getPlatform();
-    const version = '1.1.0';
+    const version = '1.1.1';
     console.log('version', version);
     
     const logData = {
