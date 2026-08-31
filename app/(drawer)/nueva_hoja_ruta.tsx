@@ -680,7 +680,7 @@ export default function NuevaHojaRutaScreen() {
                 // Se usa setTimeout para dar tiempo a que se cierre el Alert y se muestre el Toast
                 setTimeout(() => {
                   setIsConfirmingDelivery(false);
-                  handleTakePhoto(empresa, tdoc, letra, sucursal, numero);
+                  handleTakePhoto(empresa, tdoc, letra, sucursal, numero, true);
                 }, 500);
               } else {
                 setIsConfirmingDelivery(false);
@@ -899,6 +899,7 @@ export default function NuevaHojaRutaScreen() {
     letra: string,
     sucur: string,
     numero: string,
+    remitoConfirmado = false,
   ) => {
     Alert.alert(
       'Reemplazar imagen',
@@ -917,7 +918,7 @@ export default function NuevaHojaRutaScreen() {
             // Esperar a que cierre el Alert antes de abrir cámara/GPS (Android).
             InteractionManager.runAfterInteractions(() => {
               setTimeout(() => {
-                void handleTakePhoto(empresa, tdoc, letra, sucur, numero);
+                void handleTakePhoto(empresa, tdoc, letra, sucur, numero, remitoConfirmado);
               }, 350);
             });
           },
@@ -953,7 +954,14 @@ export default function NuevaHojaRutaScreen() {
     return { coords, place, permissionDenied: false as const };
   };
 
-  const handleTakePhoto = async (empresa: string, tdoc: string, letra: string, sucur: string, numero: string) => {
+  const handleTakePhoto = async (
+    empresa: string,
+    tdoc: string,
+    letra: string,
+    sucur: string,
+    numero: string,
+    remitoConfirmado = false,
+  ) => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permiso denegado', 'Se necesita permiso para acceder a la cámara.');
@@ -965,7 +973,8 @@ export default function NuevaHojaRutaScreen() {
       result = await ImagePicker.launchCameraAsync({
         quality: 0.7,
         mediaTypes: ['images'],
-        allowsEditing: false,
+        allowsEditing: true,
+        aspect: [3, 4],
         exif: false,
       });
     } catch (e) {
@@ -1004,6 +1013,11 @@ export default function NuevaHojaRutaScreen() {
         return;
       }
 
+      const usarEndpointAnalista = userRol === 'analista' && remitoConfirmado;
+      const endpoint = usarEndpointAnalista
+        ? 'guardar_imagen_remito_app_analista'
+        : 'guardar_imagen_remito_app';
+
       const coordenadasPayload = coords
         ? {
             latitude: coords.latitude,
@@ -1011,6 +1025,15 @@ export default function NuevaHojaRutaScreen() {
             accuracy: coords.accuracy,
           }
         : null;
+
+      if (usarEndpointAnalista && !coordenadasPayload) {
+        setUploadingKey(null);
+        Alert.alert(
+          'Ubicación requerida',
+          'No se pudo obtener GPS. Intentá de nuevo para guardar la imagen.',
+        );
+        return;
+      }
 
       const ubicacionPayload = place
         ? {
@@ -1025,7 +1048,7 @@ export default function NuevaHojaRutaScreen() {
         : null;
 
       const payloadLog = {
-        endpoint: 'guardar_imagen_remito_app',
+        endpoint,
         empresa,
         tdoc,
         letra,
@@ -1066,7 +1089,7 @@ export default function NuevaHojaRutaScreen() {
 
       try {
         const response = await fetch(
-          'https://www.gargano.com.ar/laravel_backend_app/public/api/guardar_imagen_remito_app',
+          `https://www.gargano.com.ar/laravel_backend_app/public/api/${endpoint}`,
           { method: 'POST', body: formData }
         );
         const data = await response.json();
@@ -1098,7 +1121,7 @@ export default function NuevaHojaRutaScreen() {
           payload: payloadLog,
           error: error instanceof Error ? error.message : String(error),
         });
-        await logError('NuevaHojaRuta', 'guardar_imagen_remito_app', {
+        await logError('NuevaHojaRuta', endpoint, {
           error: error instanceof Error ? error.message : String(error),
           remito: `${empresa}-${tdoc}-${letra}-${sucur}-${numero}`,
           payload: payloadLog,
@@ -1794,7 +1817,7 @@ export default function NuevaHojaRutaScreen() {
                                         disabled={uploadingKey !== null}
                                         onPress={() =>
                                           uploadingKey === null &&
-                                          handleReplaceImage(empresa, tdoc, letra, sucur, numero)
+                                          handleReplaceImage(empresa, tdoc, letra, sucur, numero, confirmado)
                                         }
                                       >
                                         {uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` ? (
@@ -1819,7 +1842,7 @@ export default function NuevaHojaRutaScreen() {
                                     <Text style={styles.undoConfirmButtonText}>Anular confirmacion</Text>
                                   </Pressable>
                                   <Pressable
-                                    onPress={() => uploadingKey === null && handleTakePhoto(empresa, tdoc, letra, sucur, numero)}
+                                    onPress={() => uploadingKey === null && handleTakePhoto(empresa, tdoc, letra, sucur, numero, true)}
                                     style={styles.cameraButton}
                                     disabled={uploadingKey !== null && uploadingKey === `${empresa}-${letra}-${sucur}-${numero}`}>
                                     {uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` ? (

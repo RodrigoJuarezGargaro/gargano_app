@@ -110,7 +110,9 @@ export async function logEvent(params: LogParams): Promise<void> {
     const sessionId = await getSessionId();
     const deviceId = getDeviceId();
     const platform = getPlatform();
-
+    const version = '1.1.0';
+    console.log('version', version);
+    
     const logData = {
       id_user: userId,
       username,
@@ -119,7 +121,7 @@ export async function logEvent(params: LogParams): Promise<void> {
       tipo: params.tipo,
       pantalla: params.pantalla,
       plataforma: platform,
-      version_app: APP_VERSION,
+      version_app: version,
       detalles: params.detalles || null,
     };
     console.log('[Logger] Enviando log:', params.tipo, params.pantalla, username);
