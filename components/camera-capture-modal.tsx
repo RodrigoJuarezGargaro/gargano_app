@@ -1,9 +1,10 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image as RNImage,
   Modal,
   Pressable,
   StyleSheet,
@@ -12,7 +13,16 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { compressRemitoPhoto } from '@/services/compress-photo';
+import ImageCropOverlay, {
+  createDefaultCropFrame,
+  getContainedImageRect,
+  type CropFrame,
+} from '@/components/image-crop-overlay';
+import {
+  cropAndCompressRemitoPhoto,
+  preparePhotoForCrop,
+  type PixelCrop,
+} from '@/services/compress-photo';
 
 export type CameraCaptureModalProps = {
   visible: boolean;
@@ -20,6 +30,27 @@ export type CameraCaptureModalProps = {
   onCaptured: (photo: { uri: string; width?: number; height?: number }) => void;
   onUnavailable?: () => void;
 };
+
+type StageLayout = {
+  width: number;
+  height: number;
+};
+
+function frameToPixelCrop(
+  crop: CropFrame,
+  imageRect: { x: number; y: number; width: number; height: number },
+  imageWidth: number,
+  imageHeight: number,
+): PixelCrop {
+  const scaleX = imageWidth / imageRect.width;
+  const scaleY = imageHeight / imageRect.height;
+  return {
+    originX: (crop.x - imageRect.x) * scaleX,
+    originY: (crop.y - imageRect.y) * scaleY,
+    width: crop.width * scaleX,
+    height: crop.height * scaleY,
+  };
+}
 
 export default function CameraCaptureModal({
   visible,
@@ -30,22 +61,49 @@ export default function CameraCaptureModal({
   const cameraRef = useRef<CameraView>(null);
   const [permission, requestPermission] = useCameraPermissions();
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isSavingCrop, setIsSavingCrop] = useState(false);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   const [previewSize, setPreviewSize] = useState<{ width?: number; height?: number }>({});
+  const [stageLayout, setStageLayout] = useState<StageLayout>({ width: 0, height: 0 });
+  const [crop, setCrop] = useState<CropFrame>({ x: 0, y: 0, width: 0, height: 0 });
   const [error, setError] = useState<string | null>(null);
+
+  const imageWidth = previewSize.width ?? 0;
+  const imageHeight = previewSize.height ?? 0;
+  const imageRect = useMemo(
+    () => getContainedImageRect(stageLayout.width, stageLayout.height, imageWidth, imageHeight),
+    [imageHeight, imageWidth, stageLayout.height, stageLayout.width],
+  );
+
+  const cropInitKeyRef = useRef('');
 
   useEffect(() => {
     if (!visible) {
       setIsCapturing(false);
+      setIsSavingCrop(false);
       setPreviewUri(null);
       setPreviewSize({});
+      setCrop({ x: 0, y: 0, width: 0, height: 0 });
       setError(null);
+      cropInitKeyRef.current = '';
       return;
     }
     if (!permission?.granted) {
       void requestPermission();
     }
   }, [visible, permission?.granted, requestPermission]);
+
+  useEffect(() => {
+    if (!previewUri || !stageLayout.width || !imageWidth || !imageHeight) {
+      return;
+    }
+    const key = `${previewUri}:${stageLayout.width}x${stageLayout.height}:${imageWidth}x${imageHeight}`;
+    if (cropInitKeyRef.current === key) {
+      return;
+    }
+    cropInitKeyRef.current = key;
+    setCrop(createDefaultCropFrame(getContainedImageRect(stageLayout.width, stageLayout.height, imageWidth, imageHeight)));
+  }, [imageHeight, imageWidth, previewUri, stageLayout.height, stageLayout.width]);
 
   const handleCapture = async () => {
     if (isCapturing) {
@@ -63,9 +121,18 @@ export default function CameraCaptureModal({
         setError('No se pudo tomar la foto. Intentá de nuevo.');
         return;
       }
-      const compressed = await compressRemitoPhoto(photo.uri);
-      setPreviewUri(compressed.uri);
-      setPreviewSize({ width: compressed.width, height: compressed.height });
+      const prepared = await preparePhotoForCrop(photo.uri, photo.width, photo.height);
+      let nextWidth = prepared.width ?? photo.width;
+      let nextHeight = prepared.height ?? photo.height;
+      if (!nextWidth || !nextHeight) {
+        const size = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+          RNImage.getSize(prepared.uri, (width, height) => resolve({ width, height }), reject);
+        });
+        nextWidth = size.width;
+        nextHeight = size.height;
+      }
+      setPreviewUri(prepared.uri);
+      setPreviewSize({ width: nextWidth, height: nextHeight });
     } catch (captureError) {
       const message = captureError instanceof Error ? captureError.message : String(captureError);
       setError(message || 'No se pudo tomar la foto.');
@@ -74,16 +141,43 @@ export default function CameraCaptureModal({
     }
   };
 
-  const handleUsePhoto = () => {
-    if (!previewUri) {
+  const resetPreview = () => {
+    setPreviewUri(null);
+    setPreviewSize({});
+    setCrop({ x: 0, y: 0, width: 0, height: 0 });
+    setError(null);
+    cropInitKeyRef.current = '';
+  };
+
+  const emitPhoto = async (applyCrop: boolean) => {
+    if (!previewUri || isSavingCrop) {
       return;
     }
-    onCaptured({
-      uri: previewUri,
-      width: previewSize.width,
-      height: previewSize.height,
-    });
+    setIsSavingCrop(true);
+    setError(null);
+    try {
+      const pixelCrop =
+        applyCrop && imageWidth && imageHeight && crop.width > 0
+          ? frameToPixelCrop(crop, imageRect, imageWidth, imageHeight)
+          : undefined;
+      const result = await cropAndCompressRemitoPhoto(previewUri, pixelCrop, {
+        width: imageWidth,
+        height: imageHeight,
+      });
+      onCaptured({
+        uri: result.uri,
+        width: result.width,
+        height: result.height,
+      });
+    } catch (saveError) {
+      const message = saveError instanceof Error ? saveError.message : String(saveError);
+      setError(message || 'No se pudo recortar la foto.');
+    } finally {
+      setIsSavingCrop(false);
+    }
   };
+
+  const showCropEditor = Boolean(previewUri);
 
   return (
     <Modal visible={visible} animationType="fade" onRequestClose={onCancel}>
@@ -93,13 +187,32 @@ export default function CameraCaptureModal({
             <Pressable onPress={onCancel} style={styles.headerButton} hitSlop={12}>
               <Ionicons name="close" size={26} color="#F2F5FB" />
             </Pressable>
-            <Text style={styles.title}>Foto de remito</Text>
+            <Text style={styles.title}>{showCropEditor ? 'Recortar foto' : 'Foto de remito'}</Text>
             <View style={styles.headerButton} />
           </View>
 
-          <View style={styles.stage}>
+          <View
+            style={styles.stage}
+            onLayout={(event) => {
+              const { width, height } = event.nativeEvent.layout;
+              setStageLayout((prev) =>
+                prev.width === width && prev.height === height ? prev : { width, height },
+              );
+            }}>
             {previewUri ? (
-              <Image source={{ uri: previewUri }} style={styles.preview} contentFit="contain" />
+              <>
+                <Image source={{ uri: previewUri }} style={styles.preview} contentFit="contain" />
+                {crop.width > 0 && imageWidth > 0 ? (
+                  <ImageCropOverlay
+                    containerWidth={stageLayout.width}
+                    containerHeight={stageLayout.height}
+                    imageWidth={imageWidth}
+                    imageHeight={imageHeight}
+                    crop={crop}
+                    onCropChange={setCrop}
+                  />
+                ) : null}
+              </>
             ) : permission?.granted ? (
               <CameraView
                 ref={cameraRef}
@@ -124,32 +237,40 @@ export default function CameraCaptureModal({
               </View>
             )}
 
-            {isCapturing && (
+            {(isCapturing || isSavingCrop) && (
               <View style={styles.capturingOverlay}>
                 <ActivityIndicator color="#F2F5FB" size="large" />
-                <Text style={styles.capturingText}>Preparando foto liviana…</Text>
+                <Text style={styles.capturingText}>
+                  {isSavingCrop ? 'Recortando foto…' : 'Preparando foto liviana…'}
+                </Text>
               </View>
             )}
           </View>
 
+          {showCropEditor ? (
+            <Text style={styles.hintText}>Arrastrá el recuadro o agrandalo desde la esquina inferior derecha.</Text>
+          ) : null}
+
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           <View style={styles.footer}>
-            {previewUri ? (
-              <>
-                <Pressable
-                  style={styles.secondaryButton}
-                  onPress={() => {
-                    setPreviewUri(null);
-                    setPreviewSize({});
-                    setError(null);
-                  }}>
-                  <Text style={styles.secondaryButtonText}>Repetir</Text>
+            {showCropEditor ? (
+              <View style={styles.cropActions}>
+                <View style={styles.footerRow}>
+                  <Pressable style={styles.secondaryButton} onPress={resetPreview} disabled={isSavingCrop}>
+                    <Text style={styles.secondaryButtonText}>Repetir</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.primaryButton}
+                    onPress={() => void emitPhoto(true)}
+                    disabled={isSavingCrop}>
+                    <Text style={styles.primaryButtonText}>Recortar</Text>
+                  </Pressable>
+                </View>
+                <Pressable onPress={() => void emitPhoto(false)} disabled={isSavingCrop} hitSlop={8}>
+                  <Text style={styles.skipCropText}>Usar sin recortar</Text>
                 </Pressable>
-                <Pressable style={styles.primaryButton} onPress={handleUsePhoto}>
-                  <Text style={styles.primaryButtonText}>Usar foto</Text>
-                </Pressable>
-              </>
+              </View>
             ) : (
               <Pressable
                 style={[styles.shutterButton, isCapturing && styles.shutterButtonDisabled]}
@@ -228,6 +349,13 @@ const styles = StyleSheet.create({
     color: '#F2F5FB',
     fontSize: 14,
   },
+  hintText: {
+    color: '#A0C4FF',
+    textAlign: 'center',
+    fontSize: 13,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+  },
   errorText: {
     color: '#F9B4B4',
     textAlign: 'center',
@@ -238,6 +366,16 @@ const styles = StyleSheet.create({
     minHeight: 96,
     paddingHorizontal: 24,
     paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cropActions: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 12,
+  },
+  footerRow: {
+    width: '100%',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -283,5 +421,10 @@ const styles = StyleSheet.create({
     color: '#A0C4FF',
     fontWeight: '600',
     fontSize: 15,
+  },
+  skipCropText: {
+    color: '#8A96AC',
+    fontSize: 13,
+    textDecorationLine: 'underline',
   },
 });
