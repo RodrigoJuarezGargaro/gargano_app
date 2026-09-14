@@ -2,7 +2,7 @@ module.exports = {
   expo: {
     name: "Gargano Logistica",
     slug: "gargano-logistica",
-    version: "1.1.1",
+    version: "1.1.2",
     orientation: "portrait",
     icon: "./assets/images/new_icon.png",
     scheme: "garganomobile",
@@ -70,6 +70,13 @@ module.exports = {
         {
           photosPermission: "La app accede a tus fotos para registrar eventualidades.",
           cameraPermission: "La app usa la cámara para registrar eventualidades en las entregas."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          cameraPermission: "La app usa la cámara para registrar eventualidades en las entregas.",
+          recordAudioAndroid: false
         }
       ],
       [

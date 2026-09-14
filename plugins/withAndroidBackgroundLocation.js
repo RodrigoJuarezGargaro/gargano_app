@@ -34,6 +34,8 @@ const withAndroidBackgroundLocation = (config) => {
 
     // Configurar el servicio en background
     const application = androidManifest.application[0];
+    application.$ = application.$ || {};
+    application.$['android:largeHeap'] = 'true';
 
     // Agregar configuración de servicio si no existe
     if (!application.service) {

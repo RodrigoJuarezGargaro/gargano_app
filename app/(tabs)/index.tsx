@@ -22,6 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
 
 import { saveAuthToken } from '@/services/auth-token';
+import { getLastScreen } from '@/services/hr-screen-state';
 import {
   authenticateWithBiometrics,
   enableBiometricLogin,
@@ -57,7 +58,10 @@ export default function HomeScreen() {
   const [showServerDownModal, setShowServerDownModal] = useState(false);
 
   const navigateToHome = () => {
-    router.replace('/hoja_ruta');
+    void (async () => {
+      const lastScreen = await getLastScreen();
+      router.replace(lastScreen === 'nueva_hoja_ruta' ? '/nueva_hoja_ruta' : '/hoja_ruta');
+    })();
   };
 
   const persistLoginData = async (responseData: { token?: string; user: Record<string, unknown> }, loginEmail: string) => {

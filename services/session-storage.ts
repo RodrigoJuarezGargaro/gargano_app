@@ -17,6 +17,8 @@ const SESSION_KEYS = [
   'id_perfil',
   'nombre_perfil',
   'nombre_usuario',
+  '@gargano/hr_screen_state',
+  '@gargano/last_screen',
 ] as const;
 
 let inMemorySession: UserSession | null = null;

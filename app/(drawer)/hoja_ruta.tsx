@@ -1,14 +1,15 @@
 import { authenticatedFetch } from '@/services/auth-token';
+import { setLastScreen } from '@/services/hr-screen-state';
 import { logError, logLogout } from '@/services/logger';
 import { logoutUser } from '@/services/session-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { DrawerActions, useNavigation } from '@react-navigation/native';
+import { DrawerActions, useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -21,6 +22,12 @@ export default function HojaRutaScreen() {
   const [nombreUsuario, setNombreUsuario] = useState('');
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [isCheckingPermissions, setIsCheckingPermissions] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      void setLastScreen('hoja_ruta');
+    }, []),
+  );
 
   useEffect(() => {
     const loadUserData = async () => {

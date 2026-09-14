@@ -1,17 +1,25 @@
 import { useBackgroundLocation } from '@/hooks/use-background-location';
 import { useLocation } from '@/hooks/use-location';
+import { compressRemitoPhoto } from '@/services/compress-photo';
+import {
+  loadHrScreenState,
+  parseDateLocal,
+  saveHrScreenState,
+  setLastScreen,
+} from '@/services/hr-screen-state';
 import { logAccion, logError, logLogout } from '@/services/logger';
 import { clearUserSession } from '@/services/session-storage';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { DrawerActions, useNavigation } from '@react-navigation/native';
+import { DrawerActions, useFocusEffect, useNavigation } from '@react-navigation/native';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
+import { requireOptionalNativeModule } from 'expo-modules-core';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { ActivityIndicator, Alert, Dimensions, InteractionManager, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -62,6 +70,13 @@ const hasAnyAnalistaFilter = (filters: AnalistaFilters) =>
   filters.pendienteImagen ||
   Boolean(filters.hruta.trim()) ||
   Boolean(filters.remito.trim());
+
+type InAppCameraProps = {
+  visible: boolean;
+  onCancel: () => void;
+  onCaptured: (photo: { uri: string; width?: number; height?: number }) => void;
+  onUnavailable?: () => void;
+};
 
 const logFiltroAnalista = (
   resultado: 'aplicado' | 'limpiado',
@@ -230,6 +245,34 @@ export default function NuevaHojaRutaScreen() {
   }>({ visible: false, url: '', titulo: '', isPdf: false, loading: false, error: false });
   const [isConfirmingDelivery, setIsConfirmingDelivery] = useState(false);
   const [choferesConNotificaciones, setChoferesConNotificaciones] = useState<Map<string, boolean>>(new Map());
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [InAppCamera, setInAppCamera] = useState<ComponentType<InAppCameraProps> | null>(null);
+  const pendingPhotoRef = useRef<{
+    empresa: string;
+    tdoc: string;
+    letra: string;
+    sucur: string;
+    numero: string;
+    remitoConfirmado: boolean;
+  } | null>(null);
+  const hrHydratedRef = useRef(false);
+  const cameraFallbackLock = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      void setLastScreen('nueva_hoja_ruta');
+    }, []),
+  );
+
+  useEffect(() => {
+    if (!hrHydratedRef.current) {
+      return;
+    }
+    void saveHrScreenState({
+      selectedDate: formatDateLocal(selectedDate),
+      filters: analistaFilters,
+    });
+  }, [selectedDate, analistaFilters]);
 
 
   useEffect(() => {
@@ -255,7 +298,18 @@ export default function NuevaHojaRutaScreen() {
 
       const rol = String(sessionData.perfil_nombre || sessionData.rol || '').trim().toLowerCase();
       setUserRol(rol);
-      await fetchHojaRuta(displayName, rol);
+      await setLastScreen('nueva_hoja_ruta');
+
+      const saved = await loadHrScreenState();
+      if (saved) {
+        const restoredDate = parseDateLocal(saved.selectedDate);
+        setSelectedDate(restoredDate);
+        setAnalistaFilters(saved.filters);
+        await fetchHojaRuta(displayName, rol, restoredDate, saved.filters);
+      } else {
+        await fetchHojaRuta(displayName, rol);
+      }
+      hrHydratedRef.current = true;
     };
 
     loadSession();
@@ -263,6 +317,14 @@ export default function NuevaHojaRutaScreen() {
 
   useEffect(() => {
     const manageTracking = async () => {
+      if (isCameraOpen) {
+        if (isTrackingActive) {
+          console.log('[HojaRuta] Pausando tracking mientras está abierta la cámara');
+          await stopTracking();
+        }
+        return;
+      }
+
       if (userRol !== 'chofer') {
         // Si no es chofer pero el tracking está activo, detenerlo
         if (isTrackingActive) {
@@ -338,7 +400,7 @@ export default function NuevaHojaRutaScreen() {
     if (userRol) {
       manageTracking();
     }
-  }, [userRol, isTrackingActive, startTracking, stopTracking]);
+  }, [userRol, isTrackingActive, isCameraOpen, startTracking, stopTracking]);
 
   const fetchHojaRuta = async (
     nombre: string,
@@ -954,43 +1016,66 @@ export default function NuevaHojaRutaScreen() {
     return { coords, place, permissionDenied: false as const };
   };
 
-  const handleTakePhoto = async (
-    empresa: string,
-    tdoc: string,
-    letra: string,
-    sucur: string,
-    numero: string,
-    remitoConfirmado = false,
-  ) => {
+  const persistHrBeforeCamera = async () => {
+    await setLastScreen('nueva_hoja_ruta');
+    await saveHrScreenState({
+      selectedDate: formatDateLocal(selectedDateRef.current),
+      filters: analistaFiltersRef.current,
+    });
+  };
+
+  const launchSystemCameraFallback = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permiso denegado', 'Se necesita permiso para acceder a la cámara.');
-      return;
+      return null;
     }
-    Toast.show({ type: 'info', text1: 'Abriendo cámara...' });
+
     let result: ImagePicker.ImagePickerResult;
     try {
       result = await ImagePicker.launchCameraAsync({
-        quality: 0.7,
+        quality: 0.4,
         mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [3, 4],
+        allowsEditing: false,
         exif: false,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // En algunos Android el proceso de cámara termina con una excepción aunque la foto se sacó.
-      // Si el mensaje es de cancelación o de activity result, lo ignoramos silenciosamente.
       const isBenign = msg.includes('cancel') || msg.includes('E_PICKER_CANCELLED') || msg.includes('activity');
       if (!isBenign) {
         Alert.alert('Error al abrir la cámara', msg);
       }
-      return;
+      return null;
     }
 
-    if (result.canceled || !result.assets?.length) return;
+    if (result.canceled || !result.assets?.length) {
+      return null;
+    }
 
-    const asset = result.assets[0];
+    const picked = result.assets[0];
+    const compressed = await compressRemitoPhoto(picked.uri);
+    return {
+      uri: compressed.uri,
+      width: compressed.width ?? picked.width,
+      height: compressed.height ?? picked.height,
+      fileSize: picked.fileSize ?? null,
+      mimeType: 'image/jpeg',
+    };
+  };
+
+  const processCapturedPhoto = async (asset: {
+    uri: string;
+    width?: number;
+    height?: number;
+    fileSize?: number | null;
+    mimeType?: string;
+  }) => {
+    const pending = pendingPhotoRef.current;
+    if (!pending) {
+      return;
+    }
+    pendingPhotoRef.current = null;
+    const { empresa, tdoc, letra, sucur, numero, remitoConfirmado } = pending;
     const key = `${empresa}-${letra}-${sucur}-${numero}`;
     setUploadingKey(key);
 
@@ -1166,6 +1251,70 @@ export default function NuevaHojaRutaScreen() {
     } catch (error) {
       setUploadingKey(null);
       Alert.alert('Error', 'No se pudo conectar con el servidor.');
+    }
+  };
+
+  const handleCameraUnavailable = () => {
+    if (cameraFallbackLock.current) {
+      return;
+    }
+    cameraFallbackLock.current = true;
+    setInAppCamera(null);
+    void (async () => {
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const captured = await launchSystemCameraFallback();
+        if (captured) {
+          await processCapturedPhoto(captured);
+        } else {
+          pendingPhotoRef.current = null;
+        }
+      } finally {
+        setIsCameraOpen(false);
+        cameraFallbackLock.current = false;
+      }
+    })();
+  };
+
+  const handleTakePhoto = async (
+    empresa: string,
+    tdoc: string,
+    letra: string,
+    sucur: string,
+    numero: string,
+    remitoConfirmado = false,
+  ) => {
+    pendingPhotoRef.current = { empresa, tdoc, letra, sucur, numero, remitoConfirmado };
+    setMapaModal({ visible: false, puntos: [] });
+    await persistHrBeforeCamera();
+    Toast.show({ type: 'info', text1: 'Abriendo cámara...' });
+    await new Promise<void>((resolve) => {
+      InteractionManager.runAfterInteractions(() => resolve());
+    });
+    setIsCameraOpen(true);
+
+    if (requireOptionalNativeModule('ExpoCamera')) {
+      try {
+        if (!InAppCamera) {
+          const mod = await import('@/components/camera-capture-modal');
+          setInAppCamera(() => mod.default);
+        }
+        return;
+      } catch (error) {
+        console.warn('[handleTakePhoto] Cámara in-app no disponible:', error);
+      }
+    }
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      const captured = await launchSystemCameraFallback();
+      if (captured) {
+        await processCapturedPhoto(captured);
+      } else {
+        pendingPhotoRef.current = null;
+      }
+    } finally {
+      setIsCameraOpen(false);
     }
   };
 
@@ -1644,7 +1793,11 @@ export default function NuevaHojaRutaScreen() {
         <View style={styles.sectionBlock}>
           <Text style={styles.sectionTitle}>Hojas de ruta</Text>
 
-          {rutasVisibles.length === 0 ? (
+          {isCameraOpen ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>Preparando cámara…</Text>
+            </View>
+          ) : rutasVisibles.length === 0 ? (
             <View style={styles.emptyState}>
               <Text style={styles.emptyStateText}>
                 {isLoadingRoutes
@@ -1919,6 +2072,26 @@ export default function NuevaHojaRutaScreen() {
           )}
         </View>
       </ScrollView>
+
+      {InAppCamera ? (
+        <InAppCamera
+          visible={isCameraOpen}
+          onCancel={() => {
+            setIsCameraOpen(false);
+            pendingPhotoRef.current = null;
+          }}
+          onCaptured={(photo) => {
+            setIsCameraOpen(false);
+            void processCapturedPhoto({
+              uri: photo.uri,
+              width: photo.width,
+              height: photo.height,
+              mimeType: 'image/jpeg',
+            });
+          }}
+          onUnavailable={handleCameraUnavailable}
+        />
+      ) : null}
 
       <Modal
         transparent={false}

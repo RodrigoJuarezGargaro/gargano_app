@@ -23,6 +23,13 @@ export default function DrawerLayout() {
           }}
         />
         <Drawer.Screen
+          name="nueva_hoja_ruta"
+          options={{
+            drawerLabel: 'Nueva Hoja de Ruta',
+            drawerItemStyle: { display: 'none' },
+          }}
+        />
+        <Drawer.Screen
           name="ubicacion_tiempo_real"
           options={{
             drawerLabel: 'Ubicación en Tiempo Real',
