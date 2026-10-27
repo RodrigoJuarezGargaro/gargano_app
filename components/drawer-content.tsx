@@ -88,6 +88,14 @@ export default function DrawerContent({ navigation }: DrawerContentComponentProp
           <Ionicons name="pulse-outline" size={20} color="#6FD78C" />
           <Text style={styles.navItemText}>Ver estado de la app</Text>
         </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [styles.navItem, pressed && styles.navItemPressed]}
+          onPress={() => navigation.navigate('version_app')}
+        >
+          <Ionicons name="information-circle-outline" size={20} color="#926FA9" />
+          <Text style={styles.navItemText}>Versión de la app</Text>
+        </Pressable>
       </View>
 
       {/* Cerrar sesión */}

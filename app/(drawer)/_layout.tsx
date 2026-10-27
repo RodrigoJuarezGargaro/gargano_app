@@ -41,6 +41,12 @@ export default function DrawerLayout() {
             drawerLabel: 'Ver estado de la app',
           }}
         />
+        <Drawer.Screen
+          name="version_app"
+          options={{
+            drawerLabel: 'Versión de la app',
+          }}
+        />
       </Drawer>
     </GestureHandlerRootView>
   );

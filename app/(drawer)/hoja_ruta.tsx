@@ -351,6 +351,14 @@ export default function HojaRutaScreen() {
             <Ionicons name="pulse-outline" size={28} color="#6FD78C" />
             <Text style={styles.navButtonText}>Ver estado de la app</Text>
           </Pressable>
+
+          <Pressable
+            style={({ pressed }) => [styles.navButton, pressed && styles.navButtonPressed]}
+            onPress={() => router.push('/(drawer)/version_app')}
+          >
+            <Ionicons name="information-circle-outline" size={28} color="#926FA9" />
+            <Text style={styles.navButtonText}>Versión de la app</Text>
+          </Pressable>
         </View>
 
         {/* Notificaciones Push */}
