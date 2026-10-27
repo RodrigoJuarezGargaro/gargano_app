@@ -586,16 +586,19 @@ export default function NuevaHojaRutaScreen() {
     numero: string,
     fecha: string,
   ) => {
+    const esAnalista = userRol === 'analista';
     Alert.alert(
       '¿Confirmar entrega?',
-      `Cliente: ${cliente}\nHoja de ruta: ${hruta_d}\n\nAl confirmar, se te pedirá tomar una foto de la entrega.`,
+      esAnalista
+        ? `Cliente: ${cliente}\nHoja de ruta: ${hruta_d}\n\nAl confirmar, vas a poder tomar una foto o elegir una imagen de los archivos del teléfono.`
+        : `Cliente: ${cliente}\nHoja de ruta: ${hruta_d}\n\nAl confirmar, se te pedirá tomar una foto de la entrega.`,
       [
         {
           text: 'Cancelar',
           style: 'cancel',
         },
         {
-          text: 'Confirmar y tomar foto',
+          text: esAnalista ? 'Confirmar y cargar imagen' : 'Confirmar y tomar foto',
           onPress: async () => {
             setIsConfirmingDelivery(true);
             void logAccion('confirmacion', {
