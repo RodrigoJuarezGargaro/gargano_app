@@ -955,6 +955,12 @@ export default function NuevaHojaRutaScreen() {
     }
   };
 
+  const runAfterAlert = (action: () => void) => {
+    InteractionManager.runAfterInteractions(() => {
+      setTimeout(action, 350);
+    });
+  };
+
   const handleReplaceImage = (
     empresa: string,
     tdoc: string,
@@ -963,28 +969,30 @@ export default function NuevaHojaRutaScreen() {
     numero: string,
     remitoConfirmado = false,
   ) => {
+    const startReplace = (source: 'camara' | 'archivo') => {
+      void logAccion('imagen', {
+        resultado: 'reemplazo_iniciado',
+        remito: `${letra}-${sucur}-${numero}`,
+        empresa,
+        tdoc,
+        origen: source,
+      });
+      runAfterAlert(() => {
+        if (source === 'archivo') {
+          void pickImageFromFiles(empresa, tdoc, letra, sucur, numero, remitoConfirmado);
+          return;
+        }
+        void startCameraCapture(empresa, tdoc, letra, sucur, numero, remitoConfirmado);
+      });
+    };
+
     Alert.alert(
       'Reemplazar imagen',
-      'Ya hay una imagen cargada. ¿Querés sacar otra foto y reemplazarla?',
+      'Ya hay una imagen cargada. Podés sacar una foto o elegir un archivo del teléfono.',
       [
         { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Reemplazar',
-          onPress: () => {
-            void logAccion('imagen', {
-              resultado: 'reemplazo_iniciado',
-              remito: `${letra}-${sucur}-${numero}`,
-              empresa,
-              tdoc,
-            });
-            // Esperar a que cierre el Alert antes de abrir cámara/GPS (Android).
-            InteractionManager.runAfterInteractions(() => {
-              setTimeout(() => {
-                void handleTakePhoto(empresa, tdoc, letra, sucur, numero, remitoConfirmado);
-              }, 350);
-            });
-          },
-        },
+        { text: 'Cámara', onPress: () => startReplace('camara') },
+        { text: 'Desde archivos', onPress: () => startReplace('archivo') },
       ],
     );
   };
@@ -1061,6 +1069,92 @@ export default function NuevaHojaRutaScreen() {
       fileSize: picked.fileSize ?? null,
       mimeType: 'image/jpeg',
     };
+  };
+
+  const pickImageFromGallery = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permiso denegado', 'Se necesita permiso para acceder a las imágenes del teléfono.');
+      return null;
+    }
+
+    let result: ImagePicker.ImagePickerResult;
+    try {
+      result = await ImagePicker.launchImageLibraryAsync({
+        quality: 0.4,
+        mediaTypes: ['images'],
+        allowsEditing: false,
+        exif: false,
+      });
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      Alert.alert('Error al abrir archivos', msg);
+      return null;
+    }
+
+    if (result.canceled || !result.assets?.length) {
+      return null;
+    }
+
+    const picked = result.assets[0];
+    const compressed = await compressRemitoPhoto(picked.uri);
+    return {
+      uri: compressed.uri,
+      width: compressed.width ?? picked.width,
+      height: compressed.height ?? picked.height,
+      fileSize: picked.fileSize ?? null,
+      mimeType: 'image/jpeg',
+    };
+  };
+
+  const pickImageFromFiles = async (
+    empresa: string,
+    tdoc: string,
+    letra: string,
+    sucur: string,
+    numero: string,
+    remitoConfirmado = false,
+  ) => {
+    pendingPhotoRef.current = { empresa, tdoc, letra, sucur, numero, remitoConfirmado };
+    setMapaModal({ visible: false, puntos: [] });
+    await persistHrBeforeCamera();
+    Toast.show({ type: 'info', text1: 'Abriendo archivos...' });
+
+    const captured = await pickImageFromGallery();
+    if (captured) {
+      await processCapturedPhoto(captured);
+    } else {
+      pendingPhotoRef.current = null;
+    }
+  };
+
+  const promptAnalistaImageSource = (
+    empresa: string,
+    tdoc: string,
+    letra: string,
+    sucur: string,
+    numero: string,
+    remitoConfirmado: boolean,
+    title = 'Cargar imagen',
+    message = 'Podés tomar una foto o elegir un archivo del teléfono.',
+  ) => {
+    Alert.alert(title, message, [
+      { text: 'Cancelar', style: 'cancel' },
+      {
+        text: 'Cámara',
+        onPress: () =>
+          runAfterAlert(() => {
+            void startCameraCapture(empresa, tdoc, letra, sucur, numero, remitoConfirmado);
+          }),
+      },
+      {
+        text: 'Desde archivos',
+        onPress: () =>
+          runAfterAlert(() => {
+            void pickImageFromFiles(empresa, tdoc, letra, sucur, numero, remitoConfirmado);
+          }),
+      },
+    ]);
   };
 
   const processCapturedPhoto = async (asset: {
@@ -1276,7 +1370,7 @@ export default function NuevaHojaRutaScreen() {
     })();
   };
 
-  const handleTakePhoto = async (
+  const startCameraCapture = async (
     empresa: string,
     tdoc: string,
     letra: string,
@@ -1316,6 +1410,21 @@ export default function NuevaHojaRutaScreen() {
     } finally {
       setIsCameraOpen(false);
     }
+  };
+
+  const handleTakePhoto = (
+    empresa: string,
+    tdoc: string,
+    letra: string,
+    sucur: string,
+    numero: string,
+    remitoConfirmado = false,
+  ) => {
+    if (userRol === 'analista') {
+      promptAnalistaImageSource(empresa, tdoc, letra, sucur, numero, remitoConfirmado);
+      return;
+    }
+    void startCameraCapture(empresa, tdoc, letra, sucur, numero, remitoConfirmado);
   };
 
   const handleVerRecorrido = (detalles: Record<string, unknown>[]) => {
@@ -1995,7 +2104,10 @@ export default function NuevaHojaRutaScreen() {
                                     <Text style={styles.undoConfirmButtonText}>Anular confirmacion</Text>
                                   </Pressable>
                                   <Pressable
-                                    onPress={() => uploadingKey === null && handleTakePhoto(empresa, tdoc, letra, sucur, numero, true)}
+                                    onPress={() =>
+                                      uploadingKey === null &&
+                                      startCameraCapture(empresa, tdoc, letra, sucur, numero, true)
+                                    }
                                     style={styles.cameraButton}
                                     disabled={uploadingKey !== null && uploadingKey === `${empresa}-${letra}-${sucur}-${numero}`}>
                                     {uploadingKey === `${empresa}-${letra}-${sucur}-${numero}` ? (
@@ -2004,6 +2116,17 @@ export default function NuevaHojaRutaScreen() {
                                       <Ionicons name="camera-outline" size={15} color="#C8D0F0" />
                                     )}
                                   </Pressable>
+                                  {userRol === 'analista' ? (
+                                    <Pressable
+                                      onPress={() =>
+                                        uploadingKey === null &&
+                                        void pickImageFromFiles(empresa, tdoc, letra, sucur, numero, true)
+                                      }
+                                      style={styles.cameraButton}
+                                      disabled={uploadingKey !== null && uploadingKey === `${empresa}-${letra}-${sucur}-${numero}`}>
+                                      <Ionicons name="folder-open-outline" size={15} color="#C8D0F0" />
+                                    </Pressable>
+                                  ) : null}
                                   {/* Botón Consultar al chofer - También disponible en remitos confirmados */}
                                   {(userRol === 'admin' || userRol === 'trafico' || userRol === 'analista') && (
                                     <Pressable
