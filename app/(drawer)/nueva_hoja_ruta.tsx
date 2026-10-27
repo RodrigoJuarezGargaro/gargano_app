@@ -19,6 +19,7 @@ import * as Location from 'expo-location';
 import { requireOptionalNativeModule } from 'expo-modules-core';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import LottieView from 'lottie-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import { ActivityIndicator, Alert, Dimensions, InteractionManager, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import MapView, { Marker, Polyline } from 'react-native-maps';
@@ -2523,7 +2524,12 @@ export default function NuevaHojaRutaScreen() {
       {isConfirmingDelivery && (
         <View style={styles.loaderOverlay}>
           <View style={styles.loaderContainer}>
-            <ActivityIndicator size="large" color="#926FA9" />
+            <LottieView
+              source={require('../../assets/lottie/Delivery_Truck_Loading.json')}
+              autoPlay
+              loop
+              style={styles.loaderLottie}
+            />
             <Text style={styles.loaderText}>Procesando entrega...</Text>
             <Text style={styles.loaderSubtext}>Abriendo cámara al finalizar</Text>
           </View>
@@ -3573,11 +3579,15 @@ const styles = StyleSheet.create({
     borderColor: '#2E3D56',
     minWidth: 200,
   },
+  loaderLottie: {
+    width: 180,
+    height: 180,
+  },
   loaderText: {
     color: '#E8F0FE',
     fontSize: 16,
     fontWeight: '600',
-    marginTop: 16,
+    marginTop: 8,
     textAlign: 'center',
   },
   loaderSubtext: {
