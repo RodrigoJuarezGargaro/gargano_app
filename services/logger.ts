@@ -3,7 +3,7 @@ import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 
 const API_BASE_URL = 'https://www.gargano.com.ar/laravel_backend_app/public/api/';
-const APP_VERSION = require('../app.config.js').version;
+const APP_VERSION = require('../app.config.js').expo.version;
 
 type LogType = 'login' | 'logout' | 'error' | 'info' | 'warning' | 'accion';
 
@@ -110,7 +110,7 @@ export async function logEvent(params: LogParams): Promise<void> {
     const sessionId = await getSessionId();
     const deviceId = getDeviceId();
     const platform = getPlatform();
-    const version = '1.1.5';
+    const version = '1.1.7';
 
     const logData = {
       id_user: userId,

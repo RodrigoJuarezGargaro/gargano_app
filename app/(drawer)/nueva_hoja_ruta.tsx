@@ -591,7 +591,7 @@ export default function NuevaHojaRutaScreen() {
     Alert.alert(
       '¿Confirmar entrega?',
       esAnalista
-        ? `Cliente: ${cliente}\nHoja de ruta: ${hruta_d}\n\nAl confirmar, vas a poder tomar una foto o elegir una imagen de los archivos del teléfono.`
+        ? `Cliente: ${cliente}\nHoja de ruta: ${hruta_d}\n\nAl confirmar, vas a poder tomar una foto o elegir una imagen o un PDF del teléfono.`
         : `Cliente: ${cliente}\nHoja de ruta: ${hruta_d}\n\nAl confirmar, se te pedirá tomar una foto de la entrega.`,
       [
         {
@@ -992,7 +992,7 @@ export default function NuevaHojaRutaScreen() {
 
     Alert.alert(
       'Reemplazar imagen',
-      'Ya hay una imagen cargada. Podés sacar una foto o elegir un archivo del teléfono.',
+      'Ya hay una imagen cargada. Podés sacar una foto o elegir una imagen o un PDF del teléfono.',
       [
         { text: 'Cancelar', style: 'cancel' },
         { text: 'Cámara', onPress: () => startReplace('camara') },
@@ -1111,6 +1111,18 @@ export default function NuevaHojaRutaScreen() {
     };
   };
 
+  const isPdfFile = (mimeType?: string | null, fileName?: string | null) => {
+    const mime = String(mimeType || '').toLowerCase();
+    const name = String(fileName || '').toLowerCase();
+    return mime === 'application/pdf' || name.endsWith('.pdf');
+  };
+
+  const isImageFile = (mimeType?: string | null, fileName?: string | null) => {
+    const mime = String(mimeType || '').toLowerCase();
+    const name = String(fileName || '').toLowerCase();
+    return mime.startsWith('image/') || /\.(jpe?g|png|webp|heic|gif)$/i.test(name);
+  };
+
   const pickImageFromFiles = async (
     empresa: string,
     tdoc: string,
@@ -1124,11 +1136,51 @@ export default function NuevaHojaRutaScreen() {
     await persistHrBeforeCamera();
     Toast.show({ type: 'info', text1: 'Abriendo archivos...' });
 
-    const captured = await pickImageFromGallery();
-    if (captured) {
-      await processCapturedPhoto(captured);
-    } else {
-      pendingPhotoRef.current = null;
+    try {
+      const DocumentPicker = await import('expo-document-picker');
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['image/*', 'application/pdf'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (result.canceled || !result.assets?.length) {
+        pendingPhotoRef.current = null;
+        return;
+      }
+
+      const file = result.assets[0];
+      if (isPdfFile(file.mimeType, file.name)) {
+        await processCapturedPhoto({
+          uri: file.uri,
+          fileSize: file.size ?? null,
+          mimeType: 'application/pdf',
+          fileName: file.name || `remito_${letra}-${sucur}-${numero}.pdf`,
+        });
+        return;
+      }
+
+      if (!isImageFile(file.mimeType, file.name)) {
+        pendingPhotoRef.current = null;
+        Alert.alert('Archivo no válido', 'Elegí una imagen o un PDF.');
+        return;
+      }
+
+      const compressed = await compressRemitoPhoto(file.uri);
+      await processCapturedPhoto({
+        uri: compressed.uri,
+        width: compressed.width,
+        height: compressed.height,
+        fileSize: file.size ?? null,
+        mimeType: 'image/jpeg',
+      });
+    } catch (error) {
+      console.warn('[pickImageFromFiles] Selector de archivos no disponible, se abre la galería:', error);
+      const captured = await pickImageFromGallery();
+      if (captured) {
+        await processCapturedPhoto(captured);
+      } else {
+        pendingPhotoRef.current = null;
+      }
     }
   };
 
@@ -1140,7 +1192,7 @@ export default function NuevaHojaRutaScreen() {
     numero: string,
     remitoConfirmado: boolean,
     title = 'Cargar imagen',
-    message = 'Podés tomar una foto o elegir un archivo del teléfono.',
+    message = 'Podés tomar una foto o elegir una imagen o un PDF del teléfono.',
   ) => {
     Alert.alert(title, message, [
       { text: 'Cancelar', style: 'cancel' },
@@ -1167,6 +1219,7 @@ export default function NuevaHojaRutaScreen() {
     height?: number;
     fileSize?: number | null;
     mimeType?: string;
+    fileName?: string;
   }) => {
     const pending = pendingPhotoRef.current;
     if (!pending) {
@@ -1176,11 +1229,16 @@ export default function NuevaHojaRutaScreen() {
     const { empresa, tdoc, letra, sucur, numero, remitoConfirmado } = pending;
     const key = `${empresa}-${letra}-${sucur}-${numero}`;
     setUploadingKey(key);
+    const esPdf = isPdfFile(asset.mimeType, asset.fileName);
 
     const imageMeta = {
       uri: asset.uri,
-      type: asset.mimeType ?? 'image/jpeg',
-      name: `foto_${letra}-${sucur}-${numero}.jpg`,
+      type: esPdf ? 'application/pdf' : 'image/jpeg',
+      name: esPdf
+        ? (asset.fileName?.toLowerCase().endsWith('.pdf')
+          ? asset.fileName
+          : `remito_${letra}-${sucur}-${numero}.pdf`)
+        : `foto_${letra}-${sucur}-${numero}.jpg`,
     };
 
     const imagePayload = imageMeta as unknown as Blob;
@@ -1197,9 +1255,9 @@ export default function NuevaHojaRutaScreen() {
       }
 
       const usarEndpointAnalista = userRol === 'analista' && remitoConfirmado;
-      const endpoint = usarEndpointAnalista
-        ? 'guardar_imagen_remito_app_analista'
-        : 'guardar_imagen_remito_app';
+      const endpoint = esPdf
+        ? (usarEndpointAnalista ? 'guardar_pdf_remito_app_analista' : 'guardar_pdf_remito_app')
+        : (usarEndpointAnalista ? 'guardar_imagen_remito_app_analista' : 'guardar_imagen_remito_app');
 
       const coordenadasPayload = coords
         ? {
@@ -1284,10 +1342,10 @@ export default function NuevaHojaRutaScreen() {
             payload: payloadLog,
             respuesta: data,
           });
-          Alert.alert('Error', data?.error ? JSON.stringify(data.error) : 'No se pudo guardar la imagen.');
+          Alert.alert('Error', data?.error ? JSON.stringify(data.error) : (esPdf ? 'No se pudo guardar el PDF.' : 'No se pudo guardar la imagen.'));
           return;
         }
-        Alert.alert('Éxito', 'Imagen guardada correctamente.');
+        Alert.alert('Éxito', esPdf ? 'PDF guardado correctamente.' : 'Imagen guardada correctamente.');
         void refreshHojaRuta();
         void logAccion('imagen', {
           resultado: 'guardada',
@@ -1314,6 +1372,11 @@ export default function NuevaHojaRutaScreen() {
         setUploadingKey(null);
       }
     };
+
+    if (esPdf) {
+      await guardarImagen();
+      return;
+    }
 
     try {
       // Paso 1: validar imagen con Gemini

@@ -1,7 +1,7 @@
 {
   "name": "gargano_mobile",
   "main": "expo-router/entry",
-  "version": "1.1.5",
+  "version": "1.1.7",
   "scripts": {
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
@@ -25,6 +25,7 @@
     "expo-constants": "~55.0.16",
     "expo-dev-client": "~55.0.35",
     "expo-device": "~7.0.3",
+    "expo-document-picker": "~55.0.13",
     "expo-font": "~55.0.8",
     "expo-haptics": "~55.0.14",
     "expo-image": "~55.0.11",

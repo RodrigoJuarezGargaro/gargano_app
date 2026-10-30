@@ -15,7 +15,7 @@ const BUILD_NUMBER = Constants.nativeBuildVersion ?? '-';
 
 const VERSION_NOTES = [
   'Si no hay conexión, la confirmación, el rechazo, la entrega parcial y la foto quedan guardados en el teléfono y se reintentan solos.',
-  'El analista puede cargar la imagen desde la cámara o desde los archivos del teléfono.',
+  'El analista puede cargar una imagen o un PDF desde la cámara o desde los archivos del teléfono.',
   'La foto se recorta dentro de la app, sin abrir el editor nativo.',
   'Al confirmar una entrega se muestra la animación del camión mientras se abre la cámara.',
 ];
