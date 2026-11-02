@@ -591,7 +591,7 @@ export default function NuevaHojaRutaScreen() {
     Alert.alert(
       '¿Confirmar entrega?',
       esAnalista
-        ? `Cliente: ${cliente}\nHoja de ruta: ${hruta_d}\n\nAl confirmar, vas a poder tomar una foto o elegir una imagen o un PDF del teléfono.`
+        ? `Cliente: ${cliente}\nHoja de ruta: ${hruta_d}\n\nAl confirmar, vas a poder abrir la cámara o elegir un archivo de la galería del teléfono.`
         : `Cliente: ${cliente}\nHoja de ruta: ${hruta_d}\n\nAl confirmar, se te pedirá tomar una foto de la entrega.`,
       [
         {
@@ -599,7 +599,7 @@ export default function NuevaHojaRutaScreen() {
           style: 'cancel',
         },
         {
-          text: esAnalista ? 'Confirmar y cargar imagen' : 'Confirmar y tomar foto',
+          text: esAnalista ? 'Confirmar' : 'Confirmar y tomar foto',
           onPress: async () => {
             setIsConfirmingDelivery(true);
             void logAccion('confirmacion', {
@@ -2591,10 +2591,28 @@ export default function NuevaHojaRutaScreen() {
               source={require('../../assets/lottie/Delivery_Truck_Loading.json')}
               autoPlay
               loop
+              colorFilters={[
+                'wind_blow',
+                'Eind_blow2',
+                'wheels_in_rr',
+                'wheels_in_fr',
+                'wheels_fr',
+                'wheels_rr',
+                'glass',
+                'chassis',
+                'head',
+                'box',
+                'road',
+                'dash',
+              ].map((keypath) => ({ keypath, color: '#FFFFFF' }))}
               style={styles.loaderLottie}
             />
             <Text style={styles.loaderText}>Procesando entrega...</Text>
-            <Text style={styles.loaderSubtext}>Abriendo cámara al finalizar</Text>
+            <Text style={styles.loaderSubtext}>
+              {userRol === 'analista'
+                ? 'Después vas a poder usar la cámara o la galería'
+                : 'Abriendo cámara al finalizar'}
+            </Text>
           </View>
         </View>
       )}
