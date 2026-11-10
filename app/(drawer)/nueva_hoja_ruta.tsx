@@ -99,6 +99,22 @@ const normalizeSearch = (value: string) =>
 const isImagenPendiente = (det: Record<string, unknown>) =>
   String(det.img_estado ?? '').trim() !== '1';
 
+const observacionesDeRemito = (det: Record<string, unknown>): string[] => {
+  const raw = det.observaciones;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return '';
+      }
+      return String((item as Record<string, unknown>).obser ?? '').trim();
+    })
+    .filter((nota) => nota !== '');
+};
+
 const remitoMatchesQuery = (det: Record<string, unknown>, query: string) => {
   const q = normalizeSearch(query);
   if (!q) {
@@ -2071,6 +2087,7 @@ export default function NuevaHojaRutaScreen() {
                         const confirmado = Boolean(det.confirmado);
                         const detalleKey = `${index}-${dIndex}`;
                         const telefono = String(det.telefono || '').trim();
+                        const observaciones = observacionesDeRemito(det);
                         const isDetalleExpanded = expandedDetalles.has(detalleKey);
                         return (
                           <View key={`det-${index}-${dIndex}`} style={styles.detalleItem}>
@@ -2094,6 +2111,9 @@ export default function NuevaHojaRutaScreen() {
                                   <Text style={styles.detalleCliente}>{cliente}</Text>
                                   {!isDetalleExpanded && (
                                     <Text style={styles.detalleVerDetalle}>Ver detalles</Text>
+                                  )}
+                                  {!isDetalleExpanded && observaciones.length > 0 && (
+                                    <Text style={styles.detalleTieneObs}>Tiene observaciones</Text>
                                   )}
                                 </View>
                                 <Ionicons
@@ -2122,6 +2142,19 @@ export default function NuevaHojaRutaScreen() {
                                     </View>
                                    ) : null 
                                   }
+                                  {observaciones.length > 0 ? (
+                                    <View style={styles.observacionesBlock}>
+                                      <View style={styles.observacionesHeader}>
+                                        <Ionicons name="alert-circle-outline" size={13} color="#F0D9A0" />
+                                        <Text style={styles.observacionesTitle}>Observaciones</Text>
+                                      </View>
+                                      {observaciones.map((nota, obsIndex) => (
+                                        <Text key={`obs-${detalleKey}-${obsIndex}`} style={styles.observacionText}>
+                                          {nota}
+                                        </Text>
+                                      ))}
+                                    </View>
+                                  ) : null}
                                 </>
                               )}
                               {
@@ -2996,6 +3029,37 @@ const styles = StyleSheet.create({
     color: '#5E6E85',
     fontSize: 11,
     marginTop: 1,
+  },
+  detalleTieneObs: {
+    color: '#F0D9A0',
+    fontSize: 11,
+    marginTop: 1,
+  },
+  observacionesBlock: {
+    marginTop: 8,
+    backgroundColor: 'rgba(240, 217, 160, 0.08)',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(240, 217, 160, 0.28)',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  observacionesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginBottom: 4,
+  },
+  observacionesTitle: {
+    color: '#F0D9A0',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  observacionText: {
+    color: '#F2E8C9',
+    fontSize: 13,
+    lineHeight: 18,
+    marginTop: 2,
   },
   detalleDireccion: {
     color: '#C8D0E0',
