@@ -240,6 +240,8 @@ export default function NuevaHojaRutaScreen() {
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [analistaFilters, setAnalistaFilters] = useState<AnalistaFilters>(emptyAnalistaFilters);
+  const [hojaNumero, setHojaNumero] = useState('');
+  const [busquedaHojaActiva, setBusquedaHojaActiva] = useState(false);
   const selectedDateRef = useRef(selectedDate);
   const analistaFiltersRef = useRef(analistaFilters);
   selectedDateRef.current = selectedDate;
@@ -1747,6 +1749,7 @@ export default function NuevaHojaRutaScreen() {
   const clearAnalistaFilters = () => {
     const cleared = emptyAnalistaFilters();
     setAnalistaFilters(cleared);
+    setBusquedaHojaActiva(false);
     setExpandedCards(new Set());
     logFiltroAnalista('limpiado', selectedDate, analistaFilters);
     if (USE_SERVER_ANALISTA_FILTERS && userRol === 'analista') {
@@ -1754,7 +1757,57 @@ export default function NuevaHojaRutaScreen() {
     }
   };
 
+  const buscarHojaPorNumero = async () => {
+    const numero = hojaNumero.trim();
+    if (!/^\d+$/.test(numero)) {
+      Toast.show({ type: 'error', text1: 'Ingresá el número de la hoja de ruta' });
+      return;
+    }
+
+    setBusquedaHojaActiva(true);
+    setExpandedCards(new Set());
+    setIsLoadingRoutes(true);
+    try {
+      const response = await fetch(
+        `https://www.gargano.com.ar/laravel_backend_app/public/api/obtener_hoja_ruta_por_numero/${encodeURIComponent(numero)}`,
+      );
+      if (!response.ok) {
+        setBusquedaHojaActiva(false);
+        Toast.show({ type: 'error', text1: 'No se pudo buscar la hoja de ruta' });
+        return;
+      }
+      const data = await response.json();
+      const routes = Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : [];
+      if (routes.length === 0) {
+        setBusquedaHojaActiva(false);
+        Toast.show({ type: 'info', text1: 'No se encontró esa hoja de ruta' });
+        return;
+      }
+      setHojaRuta(routes);
+      await verificarNotificacionesChoferes(routes);
+      void logAccion('filtro', {
+        resultado: 'aplicado',
+        busqueda: 'por_numero',
+        hruta_d: numero,
+      });
+    } catch (error) {
+      console.error('Error buscando hoja por número:', error);
+      setBusquedaHojaActiva(false);
+      Toast.show({ type: 'error', text1: 'No se pudo conectar con el servidor' });
+    } finally {
+      setIsLoadingRoutes(false);
+    }
+  };
+
+  const limpiarBusquedaHoja = () => {
+    setHojaNumero('');
+    setBusquedaHojaActiva(false);
+    setExpandedCards(new Set());
+    void fetchHojaRuta(userName, userRol, selectedDate, analistaFilters);
+  };
+
   const applyAnalistaFiltersToServer = () => {
+    setBusquedaHojaActiva(false);
     setExpandedCards(new Set());
     if (userRol === 'analista' && hasAnyAnalistaFilter(analistaFilters)) {
       logFiltroAnalista('aplicado', selectedDate, analistaFilters);
@@ -1880,6 +1933,7 @@ export default function NuevaHojaRutaScreen() {
                   setShowDatePicker(false);
                   if (date) {
                     setSelectedDate(date);
+                    setBusquedaHojaActiva(false);
                     fetchHojaRuta(userName, userRol, date, analistaFilters);
                   }
                 }}
@@ -1899,6 +1953,7 @@ export default function NuevaHojaRutaScreen() {
                   pendienteImagen: !analistaFilters.pendienteImagen,
                 };
                 setAnalistaFilters(nextFilters);
+                setBusquedaHojaActiva(false);
                 setExpandedCards(new Set());
                 if (hasAnyAnalistaFilter(nextFilters)) {
                   logFiltroAnalista('aplicado', selectedDate, nextFilters);
@@ -1973,6 +2028,50 @@ export default function NuevaHojaRutaScreen() {
                 ) : null}
                 {hasActiveAnalistaFilters ? (
                   <Pressable onPress={clearAnalistaFilters} style={styles.filterClearButton}>
+                    <Ionicons name="close-circle-outline" size={15} color="#E8A0A0" />
+                    <Text style={styles.filterClearButtonText}>Limpiar</Text>
+                  </Pressable>
+                ) : null}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {(userRol === 'analista' || userRol === 'admin') && (
+          <View style={styles.datePickerBlock}>
+            <Text style={styles.datePickerLabel}>Buscar solo por hoja de ruta</Text>
+            <Text style={styles.filterHint}>Trae esa hoja sin usar la fecha. El listado del día queda hasta que haya un resultado.</Text>
+            <View style={styles.filterInputRow}>
+              <Ionicons name="document-text-outline" size={16} color="#8A96AC" />
+              <TextInput
+                style={styles.filterInput}
+                placeholder="Número de hoja (ej: 249252)"
+                placeholderTextColor="#6A7A96"
+                value={hojaNumero}
+                keyboardType="number-pad"
+                onChangeText={setHojaNumero}
+                onSubmitEditing={() => {
+                  void buscarHojaPorNumero();
+                }}
+                returnKeyType="search"
+              />
+            </View>
+            <View style={styles.filterActionsRow}>
+              <Text style={styles.filterResultCount}>
+                {busquedaHojaActiva ? 'Mostrando la hoja buscada' : 'No reemplaza el listado del día'}
+              </Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Pressable
+                  onPress={() => {
+                    void buscarHojaPorNumero();
+                  }}
+                  style={styles.filterClearButton}
+                >
+                  <Ionicons name="search-outline" size={15} color="#A0C4FF" />
+                  <Text style={[styles.filterClearButtonText, { color: '#A0C4FF' }]}>Buscar</Text>
+                </Pressable>
+                {busquedaHojaActiva || hojaNumero.trim() ? (
+                  <Pressable onPress={limpiarBusquedaHoja} style={styles.filterClearButton}>
                     <Ionicons name="close-circle-outline" size={15} color="#E8A0A0" />
                     <Text style={styles.filterClearButtonText}>Limpiar</Text>
                   </Pressable>
@@ -3434,6 +3533,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     marginBottom: 8,
+  },
+  filterHint: {
+    color: '#8A96AC',
+    fontSize: 12,
+    lineHeight: 16,
+    marginBottom: 10,
   },
   datePickerButton: {
     flexDirection: 'row',
